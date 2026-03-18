@@ -1,0 +1,7 @@
+If you want next-level polish later, we can:
+
+auto-fill the Quick Add name when checked
+
+or show a small input only when checked
+
+Just say the word 👍

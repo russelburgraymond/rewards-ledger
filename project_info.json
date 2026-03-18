@@ -1,0 +1,6 @@
+{
+  "project_name": "GoMining Tracker",
+  "version": "1.0.0",
+  "description": "A PHP/MySQL web application for tracking GoMining miner rewards, asset activity, and categorized income. The system allows users to log rewards manually or through batch templates, organize them by miner, category, and asset, and maintain historical reward data for analysis and reporting.",
+  "category": "Finished"
+}

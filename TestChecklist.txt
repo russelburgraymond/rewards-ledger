@@ -1,0 +1,229 @@
+GoMining Tracker – Testing Checklist
+====================================
+
+INSTALLATION TEST
+-----------------
+
+[ ] Copy project files to web directory
+[ ] Configure app/config/config.php database settings
+[ ] Open application in browser
+
+Verify:
+[ ] Setup wizard appears automatically
+[ ] No PHP errors or warnings
+[ ] Database schema auto-creates correctly
+[ ] Page styling loads properly
+
+
+ONBOARDING TEST
+---------------
+
+Miner Setup
+[ ] Enter multiple miner numbers
+[ ] Enter one miner number
+[ ] Leave miner section blank
+
+Verify:
+[ ] Miners are created correctly
+[ ] Miner dropdowns populate correctly
+
+
+Category Setup
+[ ] Default categories appear
+[ ] Add one custom category
+[ ] Add multiple custom categories
+[ ] Leave custom categories blank
+
+Verify:
+[ ] Custom categories save correctly
+
+
+Referral Setup
+[ ] Enter referral ID and name
+[ ] Enter referral ID without name
+[ ] Leave referrals blank
+
+Verify:
+[ ] Referrals save correctly
+[ ] Referrals appear in dropdowns
+
+
+Dashboard Category Selection
+[ ] Select multiple categories
+[ ] Select only one category
+[ ] Select none
+
+Verify:
+[ ] Dashboard cards match selections
+
+
+POST-SETUP TEST
+---------------
+
+Verify after setup completes:
+
+[ ] Dashboard loads successfully
+[ ] Miners appear in miner list
+[ ] Categories appear in category list
+[ ] Assets exist (GMT etc.)
+[ ] Navigation menu works correctly
+
+
+CORE MANAGEMENT PAGES
+---------------------
+
+Miners
+[ ] Add miner
+[ ] Edit miner
+[ ] Verify miner appears in dropdowns
+
+Referrals
+[ ] Add referral
+[ ] Edit referral
+
+Categories
+[ ] Add category
+[ ] Edit category
+
+Assets
+[ ] Verify GMT exists
+[ ] Add new asset (example BTC)
+
+Accounts
+[ ] Add account
+[ ] Verify account appears in entry dropdowns
+
+
+TEMPLATE SYSTEM
+---------------
+
+Template Creation
+[ ] Create template
+[ ] Add template rows
+
+Template Fields
+[ ] Miner field works
+[ ] Category field works
+[ ] Asset field works
+[ ] Default notes save
+
+
+Template Display Options
+[ ] Show Miner
+[ ] Show Referral
+[ ] Show Category
+[ ] Show Asset
+[ ] Show From Account
+[ ] Show To Account
+[ ] Show Amount
+[ ] Show Notes
+
+
+BATCH GENERATION
+----------------
+
+[ ] Click "Use Template"
+[ ] Template form loads correctly
+
+Verify:
+[ ] Prefilled values appear
+[ ] Hidden fields do not appear
+[ ] Amount fields accept input
+[ ] Blank rows allowed
+
+[ ] Save batch successfully
+
+
+BATCH EDITOR
+------------
+
+Open saved batch.
+
+Verify:
+[ ] Batch title correct
+[ ] Batch date correct
+[ ] Line items saved correctly
+
+Test:
+[ ] Edit line item
+[ ] Duplicate line item
+[ ] Delete line item
+[ ] Add new manual line item
+
+
+QUICK ENTRY TEST
+----------------
+
+[ ] Open Quick Entry page
+[ ] Enter entry manually
+[ ] Save entry
+
+Verify:
+[ ] Entry saved successfully
+[ ] Entry appears in batch
+
+
+DASHBOARD TEST
+--------------
+
+Verify dashboard cards:
+
+[ ] Cash Investment
+[ ] Electricity Cost
+[ ] Maintenance Cost
+[ ] Gross Mining Reward
+[ ] Net Mining Reward
+
+Verify:
+[ ] Totals calculate correctly
+[ ] Recent batches update
+
+
+DATA INTEGRITY TESTS
+--------------------
+
+[ ] Blank amount entry
+[ ] Decimal values
+[ ] Large values
+[ ] Multiple miners
+[ ] Multiple assets
+
+Verify:
+[ ] No errors occur
+[ ] Data saved correctly
+
+
+USER INTERFACE REVIEW
+---------------------
+
+[ ] Inputs visible before clicking
+[ ] Buttons aligned properly
+[ ] Tables readable
+[ ] Layout acceptable on smaller screens
+
+
+BUG TRACKING
+------------
+
+Bug #1
+Location:
+Description:
+Steps to reproduce:
+
+
+Bug #2
+Location:
+Description:
+Steps to reproduce:
+
+
+IDEAS / IMPROVEMENTS
+--------------------
+
+Idea #1
+
+
+Idea #2
+
+
+Idea #3
