@@ -418,21 +418,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                                     <?php endif; ?>
                                 </td>
 
-                                <td>
-                                    <?php if ((int)$line['show_from_account'] === 1): ?>
-                                        <select name="from_account_id[]">
-                                            <option value="0">None</option>
-                                            <?php foreach ($accounts as $a): ?>
-                                                <option value="<?= (int)$a['id'] ?>" <?= (int)$line['from_account_id'] === (int)$a['id'] ? 'selected' : '' ?>>
-                                                    <?= h($a['account_name']) ?>
-                                                </option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                    <?php else: ?>
-                                        <?= h($line['from_account_name'] ?? '') ?>
-                                        <input type="hidden" name="from_account_id[]" value="<?= (int)$line['from_account_id'] ?>">
-                                    <?php endif; ?>
-                                </td>
+								<td>
+									<select name="from_account_id[]">
+										<option value="0">None</option>
+										<?php foreach ($accounts as $a): ?>
+											<option value="<?= (int)$a['id'] ?>" <?= (int)$line['from_account_id'] === (int)$a['id'] ? 'selected' : '' ?>>
+												<?= h($a['account_name']) ?>
+											</option>
+										<?php endforeach; ?>
+									</select>
+								</td>
 
                                 <td>
                                     <?php if ((int)$line['show_to_account'] === 1): ?>
