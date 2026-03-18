@@ -6,7 +6,7 @@
 
 $DB_HOST = $DB_HOST ?? 'localhost';
 $DB_USER = $DB_USER ?? 'root';
-$DB_PASS = $DB_PASS ?? '';
+$DB_PASS = $DB_PASS ?? '3473';
 $DB_NAME = $DB_NAME ?? '007i_gomining_tracker';
 
 ////////////////////////////////////////////////////
