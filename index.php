@@ -30,7 +30,8 @@ $allowed_pages = [
     'accounts',
     'templates',
     'template_edit',
-	'template_use',
+    'template_use',
+    'template_delete',
 ];
 
 if (!in_array($page, $allowed_pages, true)) {

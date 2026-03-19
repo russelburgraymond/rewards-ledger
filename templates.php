@@ -4,6 +4,13 @@ $current_page = 'templates';
 
 $error = "";
 $success = "";
+$msg = $_GET['msg'] ?? '';
+
+if ($msg === 'template_deleted') {
+    $success = "Template deleted.";
+} elseif ($msg === 'invalid_template') {
+    $error = "Invalid template id.";
+}
 
 /* -----------------------------
    LOAD TEMPLATE LIST
@@ -62,6 +69,7 @@ if ($res) {
                         <th style="width:100px;">Lines</th>
                         <th style="width:90px;">Edit</th>
                         <th style="width:90px;">Use</th>
+						<th style="width:90px;">Delete</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -84,6 +92,12 @@ if ($res) {
                             <td>
                                 <a class="table-link" href="index.php?page=template_use&id=<?= (int)$t['id'] ?>">Use</a>
                             </td>
+							<td>
+								<a href="index.php?page=template_delete&id=<?= (int)$t['id'] ?>"
+								   onclick="return confirm('Delete this template and its template lines?');">
+								   Delete
+								</a>
+							</td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>

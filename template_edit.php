@@ -231,10 +231,92 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'add_l
                 $show_in_quick_add,
                 $quick_add_name
             );
-            $stmt->execute();
-            $stmt->close();
+if ($stmt->execute()) {
+    $new_template_item_id = (int)$stmt->insert_id;
+    $stmt->close();
 
-            $success = "Template line added.";
+    // If this line should also appear in Quick Entry, create a quick_add_items row
+    if ($show_in_quick_add === 1) {
+        $template_app_id = 0;
+
+        $stmtApp = $conn->prepare("SELECT app_id FROM templates WHERE id = ? LIMIT 1");
+        if ($stmtApp) {
+            $stmtApp->bind_param("i", $template_id);
+            $stmtApp->execute();
+            $resApp = $stmtApp->get_result();
+            $rowApp = $resApp ? $resApp->fetch_assoc() : null;
+            $template_app_id = (int)($rowApp['app_id'] ?? 0);
+            $stmtApp->close();
+        }
+
+        $stmtQa = $conn->prepare("
+            INSERT INTO quick_add_items (
+                app_id,
+                quick_add_name,
+                miner_id,
+                asset_id,
+                category_id,
+                referral_id,
+                from_account_id,
+                to_account_id,
+                amount,
+                notes,
+                show_miner,
+                show_asset,
+                show_category,
+                show_referral,
+                show_amount,
+                show_notes,
+                show_from_account,
+                show_to_account,
+                sort_order,
+                is_active
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        ");
+
+        if ($stmtQa) {
+            $sort_order = 0;
+
+            $stmtQa->bind_param(
+                "isiiiiiidsiiiiiiiii",
+                $template_app_id,
+                $quick_add_name,
+                $miner_id,
+                $asset_id,
+                $category_id,
+                $referral_id,
+                $from_account_id,
+                $to_account_id,
+                $amount_decimal,
+                $notes,
+                $show_miner,
+                $show_asset,
+                $show_category,
+                $show_referral,
+                $show_amount,
+                $show_notes,
+                $show_from_account,
+                $show_to_account,
+                $sort_order
+            );
+
+            if (!$stmtQa->execute()) {
+                $error = "Template line added, but Quick Entry item was not created: " . $stmtQa->error;
+            }
+            $stmtQa->close();
+        } else {
+            $error = "Template line added, but Quick Entry item could not be prepared: " . $conn->error;
+        }
+    }
+
+    if ($error === "") {
+        $success = "Template line added.";
+    }
+} else {
+    $error = "Could not add template line: " . $stmt->error;
+    $stmt->close();
+}
         }
     }
 }

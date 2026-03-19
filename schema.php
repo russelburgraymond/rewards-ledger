@@ -769,6 +769,15 @@ if (!function_exists('ensure_schema')) {
         // -------------------------------------------------
         // SETTINGS
         // -------------------------------------------------
+	$should_seed_defaults = false;
+
+	$res = $conn->query("SELECT COUNT(*) AS c FROM `apps`");
+	if ($res) {
+		$row = $res->fetch_assoc();
+		$should_seed_defaults = ((int)($row['c'] ?? 0) === 0);
+	}
+
+	if ($should_seed_defaults) {	
         $conn->query("
             INSERT INTO `settings` (`setting_key`, `setting_value`)
             VALUES
@@ -973,5 +982,6 @@ if (!function_exists('ensure_schema')) {
         $conn->query("ALTER TABLE `templates` AUTO_INCREMENT = 2");
         $conn->query("ALTER TABLE `template_items` AUTO_INCREMENT = 6");
         $conn->query("ALTER TABLE `quick_add_items` AUTO_INCREMENT = 15");
+}
 }
 ?>
