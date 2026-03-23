@@ -144,50 +144,53 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             ? (int)($_POST['to_account_id'] ?? 0)
             : (int)($quick_add['to_account_id'] ?? 0);
 
-		$is_multi_add = (int)($quick_add['is_multi_add'] ?? 0);
+			$is_multi_add = (int)($quick_add['is_multi_add'] ?? 0);
 
-		$amount_raw = ((int)$quick_add['show_amount'] === 1 && $is_multi_add !== 1)
-			? trim($_POST['amount'] ?? '')
-			: (string)($quick_add['amount'] ?? '0');
+			$amount_raw = ((int)$quick_add['show_amount'] === 1 && $is_multi_add !== 1)
+				? trim($_POST['amount'] ?? '')
+				: (string)($quick_add['amount'] ?? '0');
 
-		$amount_lines_raw = ((int)$quick_add['show_amount'] === 1 && $is_multi_add === 1)
-			? trim($_POST['amount_lines'] ?? '')
-			: '';
+			$amount_lines_raw = ((int)$quick_add['show_amount'] === 1 && $is_multi_add === 1)
+				? trim($_POST['amount_lines'] ?? '')
+				: '';
 
         $notes = ((int)$quick_add['show_notes'] === 1)
             ? trim($_POST['notes'] ?? '')
             : trim((string)($quick_add['notes'] ?? ''));
 
-			if ($category_id <= 0) {
-				$error = "Please choose a category.";
-			} elseif ($is_multi_add === 1) {
-				if ($amount_lines_raw === '') {
-					$error = "Please enter at least one amount.";
-				} else {
-					$amount_lines = preg_split('/\r\n|\r|\n/', $amount_lines_raw);
-					$valid_amounts = [];
+        $amounts_to_save = [];
 
-					foreach ($amount_lines as $line) {
-						$line = trim($line);
-						if ($line === '') {
-							continue;
-						}
-						if (!is_numeric($line)) {
-							$error = "One or more multi-add amounts are invalid.";
-							break;
-						}
-						$valid_amounts[] = (float)$line;
-					}
+        if ($category_id <= 0) {
+            $error = "Please choose a category.";
+        } elseif ($is_multi_add === 1) {
+            if ($amount_lines_raw === '') {
+                $error = "Please enter at least one amount.";
+            } else {
+                $amount_lines = preg_split('/\r\n|\r|\n/', $amount_lines_raw);
 
-					if ($error === '' && empty($valid_amounts)) {
-						$error = "Please enter at least one valid amount.";
-					}
-				}
-			} elseif ($amount_raw !== '' && !is_numeric($amount_raw)) {
-				$error = "Please enter a valid amount.";
-			} else {
-            $amount = ($amount_raw === '') ? 0 : (float)$amount_raw;
+                foreach ($amount_lines as $line) {
+                    $line = trim($line);
+                    if ($line === '') {
+                        continue;
+                    }
+                    if (!is_numeric($line)) {
+                        $error = "One or more multi-add amounts are invalid.";
+                        break;
+                    }
+                    $amounts_to_save[] = (float)$line;
+                }
 
+                if ($error === '' && empty($amounts_to_save)) {
+                    $error = "Please enter at least one valid amount.";
+                }
+            }
+        } elseif ($amount_raw !== '' && !is_numeric($amount_raw)) {
+            $error = "Please enter a valid amount.";
+        } else {
+            $amounts_to_save[] = ($amount_raw === '') ? 0 : (float)$amount_raw;
+        }
+
+        if ($error === '') {
             $stmt = $conn->prepare("
                 INSERT INTO batches (app_id, batch_date, title, notes)
                 VALUES (?, ?, '', '')
@@ -202,24 +205,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             } else {
                 $error = "Could not create batch: " . $conn->error;
             }
+        }
 
-            if ($error === "") {
-                $stmt = $conn->prepare("
-                    INSERT INTO batch_items (
-                        batch_id,
-                        miner_id,
-                        asset_id,
-                        category_id,
-                        referral_id,
-                        from_account_id,
-                        to_account_id,
-                        amount,
-                        notes
-                    )
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ");
+        if ($error === '') {
+            $stmt = $conn->prepare("
+                INSERT INTO batch_items (
+                    batch_id,
+                    miner_id,
+                    asset_id,
+                    category_id,
+                    referral_id,
+                    from_account_id,
+                    to_account_id,
+                    amount,
+                    notes
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ");
 
-                if ($stmt) {
+            if ($stmt) {
+                foreach ($amounts_to_save as $amount) {
                     $stmt->bind_param(
                         "iiiiiiids",
                         $batch_id,
@@ -232,14 +237,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                         $amount,
                         $notes
                     );
-                    $stmt->execute();
-                    $stmt->close();
 
+                    if (!$stmt->execute()) {
+                        $error = "Could not save quick entry: " . $stmt->error;
+                        break;
+                    }
+                }
+
+                $stmt->close();
+
+                if ($error === '') {
                     header("Location: index.php?page=quick_entry&saved=1");
                     exit;
-                } else {
-                    $error = "Could not save quick entry: " . $conn->error;
                 }
+            } else {
+                $error = "Could not save quick entry: " . $conn->error;
             }
         }
     }
@@ -275,7 +287,7 @@ $res = $conn->query("
     LEFT JOIN miners m ON m.id = bi.miner_id
     LEFT JOIN assets a ON a.id = bi.asset_id
     LEFT JOIN categories c ON c.id = bi.category_id
-    ORDER BY qa.is_active DESC, qa.sort_order ASC, qa.id ASC
+    ORDER BY b.id DESC, bi.id DESC
     LIMIT 10
 ");
 

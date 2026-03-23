@@ -6,14 +6,15 @@
 
 $DB_HOST = 'localhost';
 $DB_USER = 'root';
-$DB_PASS = '';
-$DB_NAME = '007_rewards_tracker';
+$DB_PASS = '3473';
+$DB_NAME = '007_rewardsledger';
 
 ////////////////////////////////////////////////////
 //  APP SETTINGS                                  //
 ////////////////////////////////////////////////////
 
 $APP_NAME = 'RewardLedger';
+$ONBOARDING_COMPLETE = 1;
 
 ////////////////////////////////////////////////////
 //  Do not edit below this line.                  //
