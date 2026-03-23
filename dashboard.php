@@ -47,6 +47,8 @@ if ($selected_ids) {
 					c.id AS category_id,
 					c.category_name,
 					c.behavior_type,
+					c.dashboard_order,
+					c.dashboard_row,
 					c.sort_order,
 					c.dashboard_order,
 					ap.id AS app_id,
@@ -73,12 +75,10 @@ if ($selected_ids) {
             c.id, c.category_name, c.behavior_type, c.sort_order, c.dashboard_order,
             ap.id, ap.app_name,
             a.id, a.asset_name, a.asset_symbol
-        ORDER BY
-            c.dashboard_order ASC,
-            ap.app_name ASC,
-            c.sort_order ASC,
-            c.category_name ASC,
-            a.asset_name ASC
+        ORDER BY 
+			c.dashboard_row ASC, 
+			c.dashboard_order ASC, 
+			c.id ASC
     ");
 
     if ($res) {
@@ -90,6 +90,7 @@ if ($selected_ids) {
             if (!isset($cards_by_key[$card_key])) {
                 $cards_by_key[$card_key] = [
                     'category_id' => (int)$row['category_id'],
+                    'dashboard_row' => (int)$row['dashboard_row'],
                     'dashboard_order' => (int)$row['dashboard_order'],
                     'app_name' => $row['app_name'] ?: 'Unassigned',
                     'label' => $row['category_name'],
@@ -120,10 +121,13 @@ if ($selected_ids) {
         $summary_cards = array_values($cards_by_key);
 
         usort($summary_cards, function ($a, $b) {
-            if ($a['dashboard_order'] === $b['dashboard_order']) {
-                return strcmp($a['app_name'] . $a['label'], $b['app_name'] . $b['label']);
+            if ($a['dashboard_row'] === $b['dashboard_row']) {
+                if ($a['dashboard_order'] === $b['dashboard_order']) {
+                    return strcmp($a['app_name'] . $a['label'], $b['app_name'] . $b['label']);
+                }
+                return $a['dashboard_order'] <=> $b['dashboard_order'];
             }
-            return $a['dashboard_order'] <=> $b['dashboard_order'];
+            return $a['dashboard_row'] <=> $b['dashboard_row'];
         });
     } elseif ($dashboard_error === '') {
         $dashboard_error = 'Tracked totals query failed: ' . $conn->error;
@@ -199,44 +203,74 @@ if ($res) {
 
 <?php if (!empty($summary_cards)): ?>
     <div class="card mt-20">
-        <h3>Tracked Category Totals</h3>
+<div style="display:flex; align-items:center; gap:10px;">
+    <h2 style="margin:0;">Tracked Category Totals</h2>
+
+    <button 
+        type="button" 
+        id="toggle-dashboard-lock" 
+        class="dashboard-lock-btn"
+        title="Lock / Unlock dashboard layout"
+    >
+        🔒
+    </button>
+</div>
         <p class="subtext">These cards are based on Dashboard Settings and grouped by app. Drag to rearrange.</p>
 
-        <div id="dashboard-cards" class="summary-grid" style="margin-top:18px;">
-            <?php foreach ($summary_cards as $card): ?>
-                <div
-                    class="summary-card 
-    <?= !empty($card['assets']) ? 'type-' . h($card['type']) : 'type-empty' ?>"
-                    data-category-id="<?= (int)$card['category_id'] ?>"
-                    style="cursor:move;"
-                >
-                    <div class="summary-label">
-                        <?= h($card['app_name']) ?> · <?= h($card['label']) ?>
-                    </div>
+<?php
+$max_rows = 4; // change if you want more rows
+$grouped_rows = [];
 
-                    <?php if (!empty($card['assets'])): ?>
-                        <?php foreach ($card['assets'] as $asset): ?>
-                            <div style="margin-top:10px;">
-                                <div class="subtext" style="margin-bottom:4px;">
-                                    <?= h($asset['label']) ?>
+for ($i = 1; $i <= $max_rows; $i++) {
+    $grouped_rows[$i] = [];
+}
+
+foreach ($summary_cards as $card) {
+    $row_no = (int)($card['dashboard_row'] ?? 1);
+    if ($row_no < 1) $row_no = 1;
+    if ($row_no > $max_rows) $row_no = $max_rows;
+    $grouped_rows[$row_no][] = $card;
+}
+?>
+<div id="dashboard-rows" class="dashboard-rows" style="margin-top:18px;">
+    <?php for ($row_no = 1; $row_no <= $max_rows; $row_no++): ?>
+        <?php if (!empty($grouped_rows[$row_no])): ?>
+            <div class="dashboard-row" data-row="<?= $row_no ?>">
+                <?php foreach ($grouped_rows[$row_no] as $card): ?>
+                    <div
+                        class="summary-card dashboard-card <?= !empty($card['assets']) ? 'type-' . h($card['type']) : 'type-empty' ?>"
+                        data-category-id="<?= (int)$card['category_id'] ?>"
+                    >
+                        <div class="summary-label">
+                            <?= h($card['app_name']) ?> · <?= h($card['label']) ?>
+                        </div>
+
+                        <?php if (!empty($card['assets'])): ?>
+                            <?php foreach ($card['assets'] as $asset): ?>
+                                <div style="margin-top:10px;">
+                                    <div class="subtext" style="margin-bottom:4px;">
+                                        <?= h($asset['label']) ?>
+                                    </div>
+                                    <div class="summary-value" style="font-size:20px;">
+                                        <?= h(fmt_asset_value(
+                                            $asset['value'],
+                                            (string)($asset['currency_symbol'] ?? ''),
+                                            (int)($asset['display_decimals'] ?? 8),
+                                            (int)($asset['is_fiat'] ?? 0)
+                                        )) ?>
+                                    </div>
                                 </div>
-								<div class="summary-value" style="font-size:20px;">
-									<?= h(fmt_asset_value(
-										$asset['value'],
-										(string)($asset['currency_symbol'] ?? ''),
-										(int)($asset['display_decimals'] ?? 8),
-										(int)($asset['is_fiat'] ?? 0)
-									)) ?>
-								</div>
-                            </div>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <div class="subtext" style="margin-top:12px;">No entries yet</div>
-                    <?php endif; ?>
-                </div>
-            <?php endforeach; ?>
-        </div>
-    </div>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <div class="subtext" style="margin-top:12px;">No entries yet</div>
+                        <?php endif; ?>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+    <?php endfor; ?>
+</div>
+
 <?php endif; ?>
 
 <?php if (!empty($summary_cards) || !empty($recent_line_items)): ?>
@@ -347,31 +381,69 @@ if ($res) {
 <script src="assets/js/sortable.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    const cards = document.getElementById('dashboard-cards');
-    if (!cards) return;
+    if (typeof Sortable === 'undefined') return;
 
-    new Sortable(cards, {
-        animation: 150,
-        onEnd: function () {
-            const payload = [];
+    let dashboardLocked = localStorage.getItem('dashboardLocked') !== '0';
+    const toggleBtn = document.getElementById('toggle-dashboard-lock');
+    const sortableInstances = [];
 
-            cards.querySelectorAll('.summary-card').forEach(function (card, index) {
-                payload.push({
+    function saveDashboardLayout() {
+        const layout = [];
+
+        document.querySelectorAll('.dashboard-row').forEach(function (row) {
+            const rowNo = parseInt(row.dataset.row, 10) || 1;
+
+            row.querySelectorAll('.dashboard-card').forEach(function (card, positionIndex) {
+                layout.push({
                     category_id: parseInt(card.dataset.categoryId, 10),
-                    position: index
+                    dashboard_row: rowNo,
+                    dashboard_order: positionIndex + 1
                 });
             });
+        });
 
-            fetch('save_dashboard_order.php', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(payload)
-            }).catch(function (err) {
-                console.error('Failed to save dashboard order', err);
-            });
-        }
+        fetch('dashboard_save_layout.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ layout: layout })
+        });
+    }
+
+    document.querySelectorAll('.dashboard-row').forEach(function (row) {
+        const sortable = new Sortable(row, {
+            group: 'dashboardRows',
+            animation: 150,
+            draggable: '.dashboard-card',
+            disabled: dashboardLocked,
+            onEnd: saveDashboardLayout
+        });
+        sortableInstances.push(sortable);
     });
+
+    function applyLockState() {
+        sortableInstances.forEach(function (instance) {
+            instance.option('disabled', dashboardLocked);
+        });
+
+        document.querySelectorAll('.dashboard-card').forEach(function (card) {
+            card.style.cursor = dashboardLocked ? 'default' : 'move';
+        });
+
+        if (toggleBtn) {
+toggleBtn.textContent = dashboardLocked ? '🔒' : '🔓';
+toggleBtn.classList.toggle('locked', dashboardLocked);
+        }
+
+        localStorage.setItem('dashboardLocked', dashboardLocked ? '1' : '0');
+    }
+
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', function () {
+            dashboardLocked = !dashboardLocked;
+            applyLockState();
+        });
+    }
+
+    applyLockState();
 });
 </script>

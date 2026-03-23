@@ -246,6 +246,7 @@ if (!function_exists('ensure_schema')) {
                 `is_active` TINYINT(1) NOT NULL DEFAULT 1,
                 `sort_order` INT NOT NULL DEFAULT 0,
                 `dashboard_order` INT NOT NULL DEFAULT 0,
+				`dashboard_row` INT NOT NULL DEFAULT 1,
                 `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 PRIMARY KEY (`id`)
@@ -260,6 +261,7 @@ if (!function_exists('ensure_schema')) {
         rl_add_column($conn, 'categories', 'is_active', 'TINYINT(1) NOT NULL DEFAULT 1');
         rl_add_column($conn, 'categories', 'sort_order', 'INT NOT NULL DEFAULT 0');
         rl_add_column($conn, 'categories', 'dashboard_order', 'INT NOT NULL DEFAULT 0');
+		rl_add_column($conn, 'categories', 'dashboard_row', 'INT NOT NULL DEFAULT 1');
         rl_add_column($conn, 'categories', 'created_at', 'TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP');
         rl_add_column($conn, 'categories', 'updated_at', 'TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP');
 
@@ -282,6 +284,7 @@ if (!function_exists('ensure_schema')) {
         rl_add_index($conn, 'categories', 'idx_categories_active', "ALTER TABLE `categories` ADD KEY `idx_categories_active` (`is_active`)");
         rl_add_index($conn, 'categories', 'idx_categories_sort', "ALTER TABLE `categories` ADD KEY `idx_categories_sort` (`sort_order`)");
         rl_add_index($conn, 'categories', 'idx_categories_dashboard', "ALTER TABLE `categories` ADD KEY `idx_categories_dashboard` (`dashboard_order`)");
+		rl_add_index($conn, 'categories', 'idx_categories_dashboard_row', "ALTER TABLE `categories` ADD KEY `idx_categories_dashboard_row` (`dashboard_row`)");
 
         /*
         |--------------------------------------------------------------------------

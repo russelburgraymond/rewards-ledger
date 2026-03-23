@@ -76,4 +76,8 @@ function fmt_asset_value($value, string $currency_symbol = '', int $display_deci
     return $formatted;
 }
 
+function batch_entry_notice_html(): string {
+    return '<div class="batch-note"><strong>Batch Entry:</strong> This item was entered together with other items. Changing shared fields like date will update all items in this batch.</div>';
+}
+
 ?>

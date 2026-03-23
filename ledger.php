@@ -133,23 +133,28 @@ if (isset($_GET['edit'])) {
 
     if ($edit_id > 0) {
         $stmt = $conn->prepare("
-            SELECT
-                bi.id,
-                b.batch_date,
-                b.app_id,
-                bi.miner_id,
-                bi.asset_id,
-                bi.category_id,
-                bi.referral_id,
-                bi.from_account_id,
-                bi.to_account_id,
-                bi.amount,
-                bi.notes
-            FROM batch_items bi
-            INNER JOIN batches b ON b.id = bi.batch_id
-            WHERE bi.id = ?
-            LIMIT 1
-        ");
+			SELECT
+				bi.id,
+				b.batch_date,
+				b.app_id,
+				bi.miner_id,
+				bi.asset_id,
+				bi.category_id,
+				bi.referral_id,
+				bi.from_account_id,
+				bi.to_account_id,
+				bi.amount,
+				bi.notes,
+				(
+					SELECT COUNT(*)
+					FROM batch_items bi2
+					WHERE bi2.batch_id = bi.batch_id
+				) AS batch_item_count
+			FROM batch_items bi
+			INNER JOIN batches b ON b.id = bi.batch_id
+			WHERE bi.id = ?
+			LIMIT 1
+		");
 
         if ($stmt) {
             $stmt->bind_param("i", $edit_id);
@@ -159,8 +164,9 @@ if (isset($_GET['edit'])) {
             $stmt->close();
 
             if ($row) {
-                $edit = $row;
-            }
+				$edit = $row;
+				$is_batch_entry = ((int)($edit['batch_item_count'] ?? 1) > 1);
+			}
         } else {
             $error = "Could not load ledger item for editing: " . $conn->error;
         }
@@ -197,6 +203,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         'amount' => $amount_raw,
         'notes' => $notes,
     ];
+	
+	$is_batch_entry = false;
 
     if ($id <= 0) {
         $error = "Invalid ledger item.";
@@ -573,6 +581,11 @@ if ($stmt) {
                 <div class="form-row">
                     <label for="batch_date">Date</label>
                     <input type="date" id="batch_date" name="batch_date" value="<?= h($edit['batch_date']) ?>" required>
+					<?php if ($is_batch_entry): ?>
+    <div class="batch-note">
+        <strong>Batch Entry:</strong> Changing shared fields like date or app will update all items entered together in this batch.
+    </div>
+<?php endif; ?>
                 </div>
 
                 <div class="form-row">
