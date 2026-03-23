@@ -43,18 +43,21 @@ if ($selected_ids) {
     $id_list = implode(',', $selected_ids);
 
     $res = $conn->query("
-        SELECT
-            c.id AS category_id,
-            c.category_name,
-            c.behavior_type,
-            c.sort_order,
-            c.dashboard_order,
-            ap.id AS app_id,
-            ap.app_name,
-            a.id AS asset_id,
-            a.asset_name,
-            a.asset_symbol,
-            COALESCE(SUM(bi.amount), 0) AS total_amount
+		SELECT
+					c.id AS category_id,
+					c.category_name,
+					c.behavior_type,
+					c.sort_order,
+					c.dashboard_order,
+					ap.id AS app_id,
+					ap.app_name,
+					a.id AS asset_id,
+					a.asset_name,
+					a.asset_symbol,
+					a.currency_symbol,
+					a.display_decimals,
+					a.is_fiat,
+					COALESCE(SUM(bi.amount), 0) AS total_amount
         FROM categories c
         INNER JOIN apps ap
             ON ap.id = c.app_id
@@ -104,9 +107,12 @@ if ($selected_ids) {
                     $asset_label .= ' (' . $row['asset_symbol'] . ')';
                 }
 
-                $cards_by_key[$card_key]['assets'][] = [
-                    'label' => $asset_label,
-                    'value' => $amount,
+                    $cards_by_key[$card_key]['assets'][] = [
+						'label' => $asset_label,
+						'value' => $amount,
+						'currency_symbol' => $row['currency_symbol'] ?? '',
+						'display_decimals' => (int)($row['display_decimals'] ?? 8),
+						'is_fiat' => (int)($row['is_fiat'] ?? 0),
                 ];
             }
         }
@@ -135,6 +141,9 @@ $res = $conn->query("
         m.miner_name,
         a.asset_name,
         a.asset_symbol,
+		a.currency_symbol,
+		a.display_decimals,
+		a.is_fiat,
         c.category_name,
         bi.amount,
         bi.notes
@@ -196,7 +205,8 @@ if ($res) {
         <div id="dashboard-cards" class="summary-grid" style="margin-top:18px;">
             <?php foreach ($summary_cards as $card): ?>
                 <div
-                    class="summary-card type-<?= h($card['type']) ?>"
+                    class="summary-card 
+    <?= !empty($card['assets']) ? 'type-' . h($card['type']) : 'type-empty' ?>"
                     data-category-id="<?= (int)$card['category_id'] ?>"
                     style="cursor:move;"
                 >
@@ -210,9 +220,14 @@ if ($res) {
                                 <div class="subtext" style="margin-bottom:4px;">
                                     <?= h($asset['label']) ?>
                                 </div>
-                                <div class="summary-value" style="font-size:20px;">
-                                    <?= h(number_format($asset['value'], 8, '.', ',')) ?>
-                                </div>
+								<div class="summary-value" style="font-size:20px;">
+									<?= h(fmt_asset_value(
+										$asset['value'],
+										(string)($asset['currency_symbol'] ?? ''),
+										(int)($asset['display_decimals'] ?? 8),
+										(int)($asset['is_fiat'] ?? 0)
+									)) ?>
+								</div>
                             </div>
                         <?php endforeach; ?>
                     <?php else: ?>
@@ -270,7 +285,12 @@ if ($res) {
                                             <?php endif; ?>
                                         </td>
                                         <td><?= h($item['miner_name'] ?? '') ?></td>
-                                        <td><?= h(number_format((float)$item['amount'], 8, '.', ',')) ?></td>
+                                        <td><?= h(fmt_asset_value(
+											$item['amount'],
+											(string)($item['currency_symbol'] ?? ''),
+											(int)($item['display_decimals'] ?? 8),
+											(int)($item['is_fiat'] ?? 0)
+										)) ?></td>
                                     </tr>
                                 <?php endforeach; ?>
                             </tbody>

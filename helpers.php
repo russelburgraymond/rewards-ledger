@@ -44,4 +44,36 @@ function set_setting(mysqli $conn, string $key, string $value): bool
     return $ok;
 }
 
+/**
+ * Generic formatter (non-currency)
+ */
+function fmt($v, $decimals = 8): string
+{
+    return rtrim(rtrim(number_format((float)$v, $decimals, '.', ','), '0'), '.');
+}
+
+/**
+ * Currency-aware formatter
+ */
+function fmt_asset_value($value, string $currency_symbol = '', int $display_decimals = 8, int $is_fiat = 0): string
+{
+    $display_decimals = max(0, min(8, $display_decimals));
+    $formatted = number_format((float)$value, $display_decimals, '.', ',');
+
+    // Trim trailing zeros ONLY for crypto
+    if ((int)$is_fiat !== 1) {
+        $formatted = rtrim(rtrim($formatted, '0'), '.');
+    }
+
+    if ($formatted === '') {
+        $formatted = '0';
+    }
+
+    if ($currency_symbol !== '') {
+        return $currency_symbol . $formatted;
+    }
+
+    return $formatted;
+}
+
 ?>

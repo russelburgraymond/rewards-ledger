@@ -35,7 +35,7 @@ if ($res) {
 }
 
 $res = $conn->query("
-    SELECT id, asset_name, asset_symbol
+    SELECT id, asset_name, asset_symbol, currency_symbol, display_decimals, is_fiat
     FROM assets
     WHERE is_active = 1
     ORDER BY asset_name ASC
@@ -50,7 +50,7 @@ $res = $conn->query("
     SELECT id, app_id, category_name, behavior_type
     FROM categories
     WHERE is_active = 1
-    ORDER BY app_id ASC, sort_order ASC, category_name ASC
+    ORDER BY sort_order ASC, id ASC
 ");
 if ($res) {
     while ($row = $res->fetch_assoc()) {
@@ -139,9 +139,14 @@ $stmt = $conn->prepare("
         ti.show_notes,
         ti.show_from_account,
         ti.show_to_account,
+        ti.is_multi_add,
+        ti.sort_order,
         m.miner_name,
         a.asset_name,
         a.asset_symbol,
+        a.currency_symbol,
+        a.display_decimals,
+        a.is_fiat,
         c.category_name,
         r.referral_name,
         fa.account_name AS from_account_name,
@@ -154,7 +159,7 @@ $stmt = $conn->prepare("
     LEFT JOIN accounts fa ON fa.id = ti.from_account_id
     LEFT JOIN accounts ta ON ta.id = ti.to_account_id
     WHERE ti.template_id = ?
-    ORDER BY ti.id ASC
+    ORDER BY ti.sort_order ASC, ti.id ASC
 ");
 
 if ($stmt) {
@@ -418,16 +423,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                                     <?php endif; ?>
                                 </td>
 
-								<td>
-									<select name="from_account_id[]">
-										<option value="0">None</option>
-										<?php foreach ($accounts as $a): ?>
-											<option value="<?= (int)$a['id'] ?>" <?= (int)$line['from_account_id'] === (int)$a['id'] ? 'selected' : '' ?>>
-												<?= h($a['account_name']) ?>
-											</option>
-										<?php endforeach; ?>
-									</select>
-								</td>
+                                <td>
+                                    <select name="from_account_id[]">
+                                        <option value="0">None</option>
+                                        <?php foreach ($accounts as $a): ?>
+                                            <option value="<?= (int)$a['id'] ?>" <?= (int)$line['from_account_id'] === (int)$a['id'] ? 'selected' : '' ?>>
+                                                <?= h($a['account_name']) ?>
+                                            </option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </td>
 
                                 <td>
                                     <?php if ((int)$line['show_to_account'] === 1): ?>
@@ -454,7 +459,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                                             placeholder="Optional"
                                         >
                                     <?php else: ?>
-                                        <?= h((string)$line['amount']) ?>
+                                        <?= h(fmt_asset_value(
+                                            $line['amount'],
+                                            (string)($line['currency_symbol'] ?? ''),
+                                            (int)($line['display_decimals'] ?? 8),
+                                            (int)($line['is_fiat'] ?? 0)
+                                        )) ?>
                                         <input type="hidden" name="amount[]" value="<?= h((string)$line['amount']) ?>">
                                     <?php endif; ?>
                                 </td>

@@ -4,16 +4,16 @@
 //  DATABASE SETTINGS                             //
 ////////////////////////////////////////////////////
 
-$DB_HOST = $DB_HOST ?? 'localhost';
-$DB_USER = $DB_USER ?? 'root';
-$DB_PASS = $DB_PASS ?? '';
-$DB_NAME = $DB_NAME ?? '007i_gomining_tracker';
+$DB_HOST = 'localhost';
+$DB_USER = 'root';
+$DB_PASS = '';
+$DB_NAME = '007_rewards_tracker';
 
 ////////////////////////////////////////////////////
-//  You can rename the app here                   //
+//  APP SETTINGS                                  //
 ////////////////////////////////////////////////////
 
-$APP_NAME = $APP_NAME ?? "RewardLedger";
+$APP_NAME = 'RewardLedger';
 
 ////////////////////////////////////////////////////
 //  Do not edit below this line.                  //

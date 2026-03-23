@@ -1,46 +1,136 @@
 <?php
 
+$current_page = 'assets';
+
 $error = "";
 $success = "";
+
+/* -----------------------------
+   Flash messages
+----------------------------- */
+if (isset($_GET['added'])) {
+    $success = "Asset added successfully.";
+}
+
+if (isset($_GET['updated'])) {
+    $success = "Asset updated successfully.";
+}
 
 /* -----------------------------
    HANDLE SAVE
 ----------------------------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-
     $id = (int)($_POST['id'] ?? 0);
     $asset_name = trim($_POST['asset_name'] ?? '');
-    $asset_symbol = trim($_POST['asset_symbol'] ?? '');
+    $asset_symbol = strtoupper(trim($_POST['asset_symbol'] ?? ''));
+    $currency_symbol = trim($_POST['currency_symbol'] ?? '');
+    $display_decimals = (int)($_POST['display_decimals'] ?? 8);
+    $is_fiat = isset($_POST['is_fiat']) ? 1 : 0;
     $is_active = isset($_POST['is_active']) ? 1 : 0;
+
+    $display_decimals = max(0, min(8, $display_decimals));
 
     if ($asset_name === '') {
         $error = "Asset name is required.";
+    } elseif ($asset_symbol === '') {
+        $error = "Asset code is required.";
     } else {
-
+        // duplicate check by asset symbol
         if ($id > 0) {
-
-            $stmt = $conn->prepare("
-                UPDATE assets
-                SET asset_name=?, asset_symbol=?, is_active=?
-                WHERE id=?
+            $stmtDup = $conn->prepare("
+                SELECT id
+                FROM assets
+                WHERE asset_symbol = ?
+                  AND id <> ?
+                LIMIT 1
             ");
-            $stmt->bind_param("ssii", $asset_name, $asset_symbol, $is_active, $id);
-            $stmt->execute();
-            $stmt->close();
-
-            $success = "Asset updated.";
-
+            $stmtDup->bind_param("si", $asset_symbol, $id);
         } else {
-
-            $stmt = $conn->prepare("
-                INSERT INTO assets (asset_name, asset_symbol, is_active)
-                VALUES (?, ?, ?)
+            $stmtDup = $conn->prepare("
+                SELECT id
+                FROM assets
+                WHERE asset_symbol = ?
+                LIMIT 1
             ");
-            $stmt->bind_param("ssi", $asset_name, $asset_symbol, $is_active);
-            $stmt->execute();
-            $stmt->close();
+            $stmtDup->bind_param("s", $asset_symbol);
+        }
 
-            $success = "Asset added.";
+        if (!$stmtDup) {
+            $error = "Could not validate asset: " . $conn->error;
+        } else {
+            $stmtDup->execute();
+            $dupRes = $stmtDup->get_result();
+            $duplicate = $dupRes ? $dupRes->fetch_assoc() : null;
+            $stmtDup->close();
+
+            if ($duplicate) {
+                $error = "An asset with that code already exists.";
+            } else {
+                if ($id > 0) {
+                    $stmt = $conn->prepare("
+                        UPDATE assets
+                        SET
+                            asset_name = ?,
+                            asset_symbol = ?,
+                            currency_symbol = ?,
+                            display_decimals = ?,
+                            is_fiat = ?,
+                            is_active = ?
+                        WHERE id = ?
+                    ");
+
+                    if ($stmt) {
+                        $stmt->bind_param(
+                            "sssiiii",
+                            $asset_name,
+                            $asset_symbol,
+                            $currency_symbol,
+                            $display_decimals,
+                            $is_fiat,
+                            $is_active,
+                            $id
+                        );
+                        $stmt->execute();
+                        $stmt->close();
+
+                        header("Location: index.php?page=settings&tab=assets&updated=1");
+                        exit;
+                    } else {
+                        $error = "Could not update asset: " . $conn->error;
+                    }
+                } else {
+                    $stmt = $conn->prepare("
+                        INSERT INTO assets (
+                            asset_name,
+                            asset_symbol,
+                            currency_symbol,
+                            display_decimals,
+                            is_fiat,
+                            is_active
+                        )
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    ");
+
+                    if ($stmt) {
+                        $stmt->bind_param(
+                            "sssiii",
+                            $asset_name,
+                            $asset_symbol,
+                            $currency_symbol,
+                            $display_decimals,
+                            $is_fiat,
+                            $is_active
+                        );
+                        $stmt->execute();
+                        $stmt->close();
+
+                        header("Location: index.php?page=settings&tab=assets&added=1");
+                        exit;
+                    } else {
+                        $error = "Could not add asset: " . $conn->error;
+                    }
+                }
+            }
         }
     }
 }
@@ -48,48 +138,65 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 /* -----------------------------
    LOAD EDIT RECORD
 ----------------------------- */
-
 $edit = [
     'id' => 0,
     'asset_name' => '',
     'asset_symbol' => '',
+    'currency_symbol' => '',
+    'display_decimals' => 8,
+    'is_fiat' => 0,
     'is_active' => 1
 ];
 
 if (isset($_GET['edit'])) {
+    $edit_id = (int)($_GET['edit'] ?? 0);
 
-    $edit_id = (int)$_GET['edit'];
+    if ($edit_id > 0) {
+        $stmt = $conn->prepare("
+            SELECT
+                id,
+                asset_name,
+                asset_symbol,
+                currency_symbol,
+                display_decimals,
+                is_fiat,
+                is_active
+            FROM assets
+            WHERE id = ?
+        ");
 
-    $stmt = $conn->prepare("
-        SELECT id, asset_name, asset_symbol, is_active
-        FROM assets
-        WHERE id=?
-    ");
-    $stmt->bind_param("i", $edit_id);
-    $stmt->execute();
+        if ($stmt) {
+            $stmt->bind_param("i", $edit_id);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            $row = $result ? $result->fetch_assoc() : null;
+            $stmt->close();
 
-    $result = $stmt->get_result();
-
-    if ($result) {
-        $row = $result->fetch_assoc();
-        if ($row) {
-            $edit = $row;
+            if ($row) {
+                $edit = $row;
+            }
+        } else {
+            $error = "Could not load asset for editing: " . $conn->error;
         }
     }
-
-    $stmt->close();
 }
 
 /* -----------------------------
    LOAD ASSET LIST
 ----------------------------- */
-
 $assets = [];
 
 $result = $conn->query("
-    SELECT id, asset_name, asset_symbol, is_active
+    SELECT
+        id,
+        asset_name,
+        asset_symbol,
+        currency_symbol,
+        display_decimals,
+        is_fiat,
+        is_active
     FROM assets
-    ORDER BY is_active DESC, asset_name ASC
+    ORDER BY is_active DESC, sort_order ASC, asset_name ASC, id ASC
 ");
 
 if ($result) {
@@ -97,100 +204,152 @@ if ($result) {
         $assets[] = $row;
     }
 } else {
-    $error = "Asset query failed: " . $conn->error;
+    $error = "Could not load assets: " . $conn->error;
 }
-
 ?>
 
 <div class="page-head">
     <h2>Assets</h2>
+    <p class="subtext">Manage crypto and fiat assets, including display symbols and decimal formatting.</p>
 </div>
 
-<?php if ($error): ?>
-<div class="alert alert-error"><?=h($error)?></div>
+<?php if ($error !== ''): ?>
+    <div class="alert alert-error"><?= h($error) ?></div>
 <?php endif; ?>
 
-<?php if ($success): ?>
-<div class="alert alert-success"><?=h($success)?></div>
+<?php if ($success !== ''): ?>
+    <div class="alert alert-success"><?= h($success) ?></div>
 <?php endif; ?>
 
 <div class="grid-2">
+    <div class="card">
+        <h3><?= (int)$edit['id'] > 0 ? 'Edit Asset' : 'Add Asset' ?></h3>
 
-<div class="card">
+        <form method="post">
+            <input type="hidden" name="id" value="<?= (int)$edit['id'] ?>">
 
-<h3><?= $edit['id'] ? "Edit Asset" : "Add Asset" ?></h3>
+            <div class="form-row">
+                <label for="asset_name">Asset Name</label>
+                <input
+                    type="text"
+                    id="asset_name"
+                    name="asset_name"
+                    value="<?= h($edit['asset_name']) ?>"
+                    maxlength="120"
+                    required
+                >
+            </div>
 
-<form method="post">
+            <div class="form-row">
+                <label for="asset_symbol">Asset Code</label>
+                <input
+                    type="text"
+                    id="asset_symbol"
+                    name="asset_symbol"
+                    value="<?= h($edit['asset_symbol']) ?>"
+                    maxlength="40"
+                    required
+                >
+            </div>
 
-<input type="hidden" name="id" value="<?= (int)$edit['id'] ?>">
+            <div class="form-row">
+                <label for="currency_symbol">Currency Symbol</label>
+                <input
+                    type="text"
+                    id="currency_symbol"
+                    name="currency_symbol"
+                    value="<?= h($edit['currency_symbol']) ?>"
+                    maxlength="10"
+                    placeholder="Example: $, €, £, A$"
+                >
+            </div>
 
-<div class="form-row">
-<label>Asset Name</label>
-<input type="text" name="asset_name" value="<?=h($edit['asset_name'])?>" required>
-</div>
+            <div class="form-row">
+                <label for="display_decimals">Display Decimals</label>
+                <input
+                    type="number"
+                    id="display_decimals"
+                    name="display_decimals"
+                    min="0"
+                    max="8"
+                    value="<?= (int)$edit['display_decimals'] ?>"
+                >
+            </div>
 
-<div class="form-row">
-<label>Symbol</label>
-<input type="text" name="asset_symbol" value="<?=h($edit['asset_symbol'])?>">
-</div>
+            <div class="form-row">
+                <label>
+                    <input type="checkbox" name="is_fiat" <?= !empty($edit['is_fiat']) ? 'checked' : '' ?>>
+                    Fiat Currency
+                </label>
+            </div>
 
-<div class="form-row">
-<label>
-<input type="checkbox" name="is_active" <?= $edit['is_active'] ? "checked" : "" ?>>
-Active
-</label>
-</div>
+            <div class="form-row">
+                <label>
+                    <input type="checkbox" name="is_active" <?= !empty($edit['is_active']) ? 'checked' : '' ?>>
+                    Active
+                </label>
+            </div>
 
-<button class="btn btn-primary">Save</button>
+            <button type="submit" class="btn btn-primary">
+                <?= (int)$edit['id'] > 0 ? 'Save Asset' : 'Add Asset' ?>
+            </button>
 
-</form>
+            <?php if ((int)$edit['id'] > 0): ?>
+                <a class="btn btn-secondary" href="index.php?page=settings&tab=assets">Cancel Edit</a>
+            <?php endif; ?>
+        </form>
+    </div>
 
-</div>
+    <div class="card">
+        <h3>Asset List</h3>
 
-<div class="card">
-
-<h3>Asset List</h3>
-
-<table class="data-table">
-
-<thead>
-<tr>
-<th>ID</th>
-<th>Name</th>
-<th>Symbol</th>
-<th>Status</th>
-<th>Edit</th>
-</tr>
-</thead>
-
-<tbody>
-
-<?php foreach ($assets as $a): ?>
-
-<tr>
-
-<td><?= (int)$a['id'] ?></td>
-
-<td><?=h($a['asset_name'])?></td>
-
-<td><?=h($a['asset_symbol'])?></td>
-
-<td>
-<?= $a['is_active'] ? "Active" : "Inactive" ?>
-</td>
-
-<td>
-<a href="?page=assets&edit=<?=(int)$a['id']?>">Edit</a>
-</td>
-
-</tr>
-
-<?php endforeach; ?>
-
-</tbody>
-
-</table>
-
-</div>
-
+        <?php if (!$assets): ?>
+            <p class="subtext">No assets saved yet.</p>
+        <?php else: ?>
+            <div class="table-wrap">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="width:70px;">ID</th>
+                            <th>Name</th>
+                            <th style="width:90px;">Code</th>
+                            <th style="width:100px;">Symbol</th>
+                            <th style="width:90px;">Decimals</th>
+                            <th style="width:80px;">Fiat</th>
+                            <th style="width:100px;">Status</th>
+                            <th style="width:90px;">Edit</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($assets as $a): ?>
+                            <tr>
+                                <td><?= (int)$a['id'] ?></td>
+                                <td><?= h($a['asset_name']) ?></td>
+                                <td><?= h($a['asset_symbol']) ?></td>
+                                <td><?= h($a['currency_symbol']) ?></td>
+                                <td><?= (int)$a['display_decimals'] ?></td>
+                                <td>
+                                    <?php if ((int)$a['is_fiat'] === 1): ?>
+                                        <span class="badge badge-green">Yes</span>
+                                    <?php else: ?>
+                                        <span class="badge badge-gray">No</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <?php if ((int)$a['is_active'] === 1): ?>
+                                        <span class="badge badge-green">Active</span>
+                                    <?php else: ?>
+                                        <span class="badge badge-gray">Inactive</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <a class="table-link" href="index.php?page=settings&tab=assets&edit=<?= (int)$a['id'] ?>">Edit</a>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+    </div>
 </div>

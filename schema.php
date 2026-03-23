@@ -1,9 +1,7 @@
 <?php
 // schema.php
 // Safe to call on every request.
-// Creates missing tables, missing columns, and missing indexes.
-// Also upgrades older RewardsLedger / GoMining Tracker schemas to the newer layout
-// used by onboarding, templates, quick entry, batches, dashboard, apps, accounts, and referrals.
+// Creates missing tables, columns, indexes, and upgrades older installs.
 
 if (!function_exists('rl_table_exists')) {
     function rl_table_exists(mysqli $conn, string $table): bool {
@@ -89,23 +87,6 @@ if (!function_exists('rl_backfill_if_empty')) {
                 (`{$newColumn}` IS NULL OR TRIM(CAST(`{$newColumn}` AS CHAR)) = '')
                 AND `{$oldColumn}` IS NOT NULL
                 AND TRIM(CAST(`{$oldColumn}` AS CHAR)) <> ''
-        ";
-        $conn->query($sql);
-    }
-}
-
-if (!function_exists('rl_backfill_int_if_zero')) {
-    function rl_backfill_int_if_zero(mysqli $conn, string $table, string $newColumn, string $oldColumn): void {
-        if (!rl_column_exists($conn, $table, $newColumn) || !rl_column_exists($conn, $table, $oldColumn)) {
-            return;
-        }
-
-        $sql = "
-            UPDATE `{$table}`
-            SET `{$newColumn}` = `{$oldColumn}`
-            WHERE
-                (IFNULL(`{$newColumn}`, 0) = 0)
-                AND IFNULL(`{$oldColumn}`, 0) <> 0
         ";
         $conn->query($sql);
     }
@@ -254,7 +235,6 @@ if (!function_exists('ensure_schema')) {
         |--------------------------------------------------------------------------
         | CATEGORIES
         |--------------------------------------------------------------------------
-        | Supports both old columns (`name`) and new columns (`category_name`)
         */
         rl_exec($conn, "
             CREATE TABLE IF NOT EXISTS `categories` (
@@ -272,7 +252,6 @@ if (!function_exists('ensure_schema')) {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         ");
 
-        // legacy column still kept for backward compatibility
         rl_add_column($conn, 'categories', 'name', 'VARCHAR(120) NOT NULL DEFAULT \'\'');
         rl_add_column($conn, 'categories', 'app_id', 'INT UNSIGNED NOT NULL DEFAULT 0');
         rl_add_column($conn, 'categories', 'category_name', 'VARCHAR(120) NOT NULL DEFAULT \'\'');
@@ -308,14 +287,15 @@ if (!function_exists('ensure_schema')) {
         |--------------------------------------------------------------------------
         | ASSETS
         |--------------------------------------------------------------------------
-        | Supports both old columns (`name`, `symbol`) and new columns
-        |--------------------------------------------------------------------------
         */
         rl_exec($conn, "
             CREATE TABLE IF NOT EXISTS `assets` (
                 `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
                 `asset_name` VARCHAR(120) NOT NULL DEFAULT '',
                 `asset_symbol` VARCHAR(40) NOT NULL DEFAULT '',
+                `currency_symbol` VARCHAR(10) NOT NULL DEFAULT '',
+                `display_decimals` INT NOT NULL DEFAULT 8,
+                `is_fiat` TINYINT(1) NOT NULL DEFAULT 0,
                 `notes` TEXT NULL,
                 `is_active` TINYINT(1) NOT NULL DEFAULT 1,
                 `sort_order` INT NOT NULL DEFAULT 0,
@@ -325,12 +305,13 @@ if (!function_exists('ensure_schema')) {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         ");
 
-        // legacy columns
         rl_add_column($conn, 'assets', 'name', 'VARCHAR(120) NOT NULL DEFAULT \'\'');
         rl_add_column($conn, 'assets', 'symbol', 'VARCHAR(40) NOT NULL DEFAULT \'\'');
-
         rl_add_column($conn, 'assets', 'asset_name', 'VARCHAR(120) NOT NULL DEFAULT \'\'');
         rl_add_column($conn, 'assets', 'asset_symbol', 'VARCHAR(40) NOT NULL DEFAULT \'\'');
+        rl_add_column($conn, 'assets', 'currency_symbol', 'VARCHAR(10) NOT NULL DEFAULT \'\'');
+        rl_add_column($conn, 'assets', 'display_decimals', 'INT NOT NULL DEFAULT 8');
+        rl_add_column($conn, 'assets', 'is_fiat', 'TINYINT(1) NOT NULL DEFAULT 0');
         rl_add_column($conn, 'assets', 'notes', 'TEXT NULL');
         rl_add_column($conn, 'assets', 'is_active', 'TINYINT(1) NOT NULL DEFAULT 1');
         rl_add_column($conn, 'assets', 'sort_order', 'INT NOT NULL DEFAULT 0');
@@ -350,11 +331,20 @@ if (!function_exists('ensure_schema')) {
         rl_add_index($conn, 'assets', 'idx_assets_active', "ALTER TABLE `assets` ADD KEY `idx_assets_active` (`is_active`)");
         rl_add_index($conn, 'assets', 'idx_assets_sort', "ALTER TABLE `assets` ADD KEY `idx_assets_sort` (`sort_order`)");
 
+        /* -----------------------------
+           ASSET CURRENCY BACKFILL
+        ----------------------------- */
+        $conn->query("UPDATE assets SET currency_symbol='$', display_decimals=2, is_fiat=1 WHERE asset_symbol='USD' AND (currency_symbol='' OR currency_symbol IS NULL)");
+        $conn->query("UPDATE assets SET currency_symbol='€', display_decimals=2, is_fiat=1 WHERE asset_symbol='EUR' AND (currency_symbol='' OR currency_symbol IS NULL)");
+        $conn->query("UPDATE assets SET currency_symbol='£', display_decimals=2, is_fiat=1 WHERE asset_symbol='GBP' AND (currency_symbol='' OR currency_symbol IS NULL)");
+        $conn->query("UPDATE assets SET currency_symbol='A$', display_decimals=2, is_fiat=1 WHERE asset_symbol='AUD' AND (currency_symbol='' OR currency_symbol IS NULL)");
+        $conn->query("UPDATE assets SET currency_symbol='C$', display_decimals=2, is_fiat=1 WHERE asset_symbol='CAD' AND (currency_symbol='' OR currency_symbol IS NULL)");
+        $conn->query("UPDATE assets SET currency_symbol='$', display_decimals=2, is_fiat=1 WHERE asset_symbol='USDT' AND (currency_symbol='' OR currency_symbol IS NULL)");
+        $conn->query("UPDATE assets SET currency_symbol='', display_decimals=8, is_fiat=0 WHERE asset_symbol IN ('BTC','ETH','GMT','BNB') AND (currency_symbol='' OR currency_symbol IS NULL)");
+
         /*
         |--------------------------------------------------------------------------
         | MINERS
-        |--------------------------------------------------------------------------
-        | Supports both old column (`name`) and new column (`miner_name`)
         |--------------------------------------------------------------------------
         */
         rl_exec($conn, "
@@ -370,9 +360,7 @@ if (!function_exists('ensure_schema')) {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         ");
 
-        // legacy column
         rl_add_column($conn, 'miners', 'name', 'VARCHAR(120) NOT NULL DEFAULT \'\'');
-
         rl_add_column($conn, 'miners', 'miner_name', 'VARCHAR(120) NOT NULL DEFAULT \'\'');
         rl_add_column($conn, 'miners', 'notes', 'TEXT NULL');
         rl_add_column($conn, 'miners', 'is_active', 'TINYINT(1) NOT NULL DEFAULT 1');
@@ -394,8 +382,6 @@ if (!function_exists('ensure_schema')) {
         |--------------------------------------------------------------------------
         | TEMPLATES
         |--------------------------------------------------------------------------
-        | Supports old `name` and new `template_name`
-        |--------------------------------------------------------------------------
         */
         rl_exec($conn, "
             CREATE TABLE IF NOT EXISTS `templates` (
@@ -411,9 +397,7 @@ if (!function_exists('ensure_schema')) {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         ");
 
-        // legacy column
         rl_add_column($conn, 'templates', 'name', 'VARCHAR(150) NOT NULL DEFAULT \'\'');
-
         rl_add_column($conn, 'templates', 'app_id', 'INT UNSIGNED NOT NULL DEFAULT 0');
         rl_add_column($conn, 'templates', 'template_name', 'VARCHAR(150) NOT NULL DEFAULT \'\'');
         rl_add_column($conn, 'templates', 'notes', 'TEXT NULL');
@@ -437,27 +421,21 @@ if (!function_exists('ensure_schema')) {
         |--------------------------------------------------------------------------
         | TEMPLATE ITEMS
         |--------------------------------------------------------------------------
-        | Supports older line_label / description style and newer template editor style
-        |--------------------------------------------------------------------------
         */
         rl_exec($conn, "
             CREATE TABLE IF NOT EXISTS `template_items` (
                 `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
                 `template_id` INT UNSIGNED NOT NULL DEFAULT 0,
-
                 `line_label` VARCHAR(150) NOT NULL DEFAULT '',
                 `description` VARCHAR(255) NOT NULL DEFAULT '',
-
                 `miner_id` INT UNSIGNED NOT NULL DEFAULT 0,
                 `asset_id` INT UNSIGNED NOT NULL DEFAULT 0,
                 `category_id` INT UNSIGNED NOT NULL DEFAULT 0,
                 `referral_id` INT UNSIGNED NOT NULL DEFAULT 0,
                 `from_account_id` INT UNSIGNED NOT NULL DEFAULT 0,
                 `to_account_id` INT UNSIGNED NOT NULL DEFAULT 0,
-
                 `amount` DECIMAL(18,8) NOT NULL DEFAULT 0.00000000,
                 `notes` TEXT NULL,
-
                 `show_miner` TINYINT(1) NOT NULL DEFAULT 1,
                 `show_asset` TINYINT(1) NOT NULL DEFAULT 1,
                 `show_category` TINYINT(1) NOT NULL DEFAULT 1,
@@ -466,7 +444,9 @@ if (!function_exists('ensure_schema')) {
                 `show_notes` TINYINT(1) NOT NULL DEFAULT 1,
                 `show_from_account` TINYINT(1) NOT NULL DEFAULT 0,
                 `show_to_account` TINYINT(1) NOT NULL DEFAULT 0,
-
+                `show_in_quick_add` TINYINT(1) NOT NULL DEFAULT 0,
+                `quick_add_name` VARCHAR(150) NOT NULL DEFAULT '',
+                `is_multi_add` TINYINT(1) NOT NULL DEFAULT 0,
                 `sort_order` INT NOT NULL DEFAULT 0,
                 `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -493,6 +473,9 @@ if (!function_exists('ensure_schema')) {
         rl_add_column($conn, 'template_items', 'show_notes', 'TINYINT(1) NOT NULL DEFAULT 1');
         rl_add_column($conn, 'template_items', 'show_from_account', 'TINYINT(1) NOT NULL DEFAULT 0');
         rl_add_column($conn, 'template_items', 'show_to_account', 'TINYINT(1) NOT NULL DEFAULT 0');
+        rl_add_column($conn, 'template_items', 'show_in_quick_add', 'TINYINT(1) NOT NULL DEFAULT 0');
+        rl_add_column($conn, 'template_items', 'quick_add_name', 'VARCHAR(150) NOT NULL DEFAULT \'\'');
+        rl_add_column($conn, 'template_items', 'is_multi_add', 'TINYINT(1) NOT NULL DEFAULT 0');
         rl_add_column($conn, 'template_items', 'sort_order', 'INT NOT NULL DEFAULT 0');
         rl_add_column($conn, 'template_items', 'created_at', 'TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP');
         rl_add_column($conn, 'template_items', 'updated_at', 'TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP');
@@ -537,15 +520,10 @@ if (!function_exists('ensure_schema')) {
         rl_add_index($conn, 'batches', 'idx_batches_template', "ALTER TABLE `batches` ADD KEY `idx_batches_template` (`template_id`)");
         rl_add_index($conn, 'batches', 'idx_batches_date', "ALTER TABLE `batches` ADD KEY `idx_batches_date` (`batch_date`)");
         rl_add_index($conn, 'batches', 'idx_batches_status', "ALTER TABLE `batches` ADD KEY `idx_batches_status` (`status`)");
-        rl_add_column($conn, 'template_items', 'show_in_quick_add', 'TINYINT(1) NOT NULL DEFAULT 0');
-        rl_add_column($conn, 'template_items', 'quick_add_name', 'VARCHAR(150) NULL');
-        rl_add_column($conn, 'template_items', 'sort_order', 'INT NOT NULL DEFAULT 0');
-		
+
         /*
         |--------------------------------------------------------------------------
         | BATCH ITEMS
-        |--------------------------------------------------------------------------
-        | This is the table your current app code uses.
         |--------------------------------------------------------------------------
         */
         rl_exec($conn, "
@@ -553,17 +531,14 @@ if (!function_exists('ensure_schema')) {
                 `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
                 `batch_id` INT UNSIGNED NOT NULL DEFAULT 0,
                 `template_item_id` INT UNSIGNED NULL,
-
                 `miner_id` INT UNSIGNED NOT NULL DEFAULT 0,
                 `asset_id` INT UNSIGNED NOT NULL DEFAULT 0,
                 `category_id` INT UNSIGNED NOT NULL DEFAULT 0,
                 `referral_id` INT UNSIGNED NOT NULL DEFAULT 0,
                 `from_account_id` INT UNSIGNED NOT NULL DEFAULT 0,
                 `to_account_id` INT UNSIGNED NOT NULL DEFAULT 0,
-
                 `amount` DECIMAL(18,8) NOT NULL DEFAULT 0.00000000,
                 `notes` TEXT NULL,
-
                 `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 PRIMARY KEY (`id`)
@@ -602,17 +577,14 @@ if (!function_exists('ensure_schema')) {
                 `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
                 `app_id` INT UNSIGNED NOT NULL DEFAULT 0,
                 `quick_add_name` VARCHAR(150) NOT NULL DEFAULT '',
-
                 `miner_id` INT UNSIGNED NOT NULL DEFAULT 0,
                 `asset_id` INT UNSIGNED NOT NULL DEFAULT 0,
                 `category_id` INT UNSIGNED NOT NULL DEFAULT 0,
                 `referral_id` INT UNSIGNED NOT NULL DEFAULT 0,
                 `from_account_id` INT UNSIGNED NOT NULL DEFAULT 0,
                 `to_account_id` INT UNSIGNED NOT NULL DEFAULT 0,
-
                 `amount` DECIMAL(18,8) NOT NULL DEFAULT 0.00000000,
                 `notes` TEXT NULL,
-
                 `show_miner` TINYINT(1) NOT NULL DEFAULT 1,
                 `show_asset` TINYINT(1) NOT NULL DEFAULT 1,
                 `show_category` TINYINT(1) NOT NULL DEFAULT 1,
@@ -621,7 +593,7 @@ if (!function_exists('ensure_schema')) {
                 `show_notes` TINYINT(1) NOT NULL DEFAULT 1,
                 `show_from_account` TINYINT(1) NOT NULL DEFAULT 0,
                 `show_to_account` TINYINT(1) NOT NULL DEFAULT 0,
-
+                `is_multi_add` TINYINT(1) NOT NULL DEFAULT 0,
                 `sort_order` INT NOT NULL DEFAULT 0,
                 `is_active` TINYINT(1) NOT NULL DEFAULT 1,
                 `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -648,6 +620,7 @@ if (!function_exists('ensure_schema')) {
         rl_add_column($conn, 'quick_add_items', 'show_notes', 'TINYINT(1) NOT NULL DEFAULT 1');
         rl_add_column($conn, 'quick_add_items', 'show_from_account', 'TINYINT(1) NOT NULL DEFAULT 0');
         rl_add_column($conn, 'quick_add_items', 'show_to_account', 'TINYINT(1) NOT NULL DEFAULT 0');
+        rl_add_column($conn, 'quick_add_items', 'is_multi_add', 'TINYINT(1) NOT NULL DEFAULT 0');
         rl_add_column($conn, 'quick_add_items', 'sort_order', 'INT NOT NULL DEFAULT 0');
         rl_add_column($conn, 'quick_add_items', 'is_active', 'TINYINT(1) NOT NULL DEFAULT 1');
         rl_add_column($conn, 'quick_add_items', 'created_at', 'TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP');
@@ -662,9 +635,6 @@ if (!function_exists('ensure_schema')) {
         /*
         |--------------------------------------------------------------------------
         | LEGACY BATCH LINES
-        |--------------------------------------------------------------------------
-        | Keep this table available so older installs do not break.
-        | Your current app pages use batch_items, not batch_lines.
         |--------------------------------------------------------------------------
         */
         rl_exec($conn, "
@@ -708,9 +678,7 @@ if (!function_exists('ensure_schema')) {
 
         /*
         |--------------------------------------------------------------------------
-        | OPTIONAL DATA MIGRATION: batch_lines -> batch_items
-        |--------------------------------------------------------------------------
-        | Only copies old data into batch_items if batch_items is empty.
+        | OPTIONAL MIGRATION: batch_lines -> batch_items
         |--------------------------------------------------------------------------
         */
         if (rl_table_exists($conn, 'batch_lines') && rl_table_exists($conn, 'batch_items')) {
@@ -757,231 +725,210 @@ if (!function_exists('ensure_schema')) {
                 ");
             }
         }
-    }
-	        /*
+
+        /*
         |--------------------------------------------------------------------------
-        | DEFAULT SEED DATA
-        |--------------------------------------------------------------------------
-        | Based on your exported database from 2026-03-18
+        | ONE-TIME DEFAULT SEED DATA
         |--------------------------------------------------------------------------
         */
+        $should_seed_defaults = false;
 
-        // -------------------------------------------------
-        // SETTINGS
-        // -------------------------------------------------
-	$should_seed_defaults = false;
+        $res = $conn->query("SELECT COUNT(*) AS c FROM `apps`");
+        if ($res) {
+            $row = $res->fetch_assoc();
+            $should_seed_defaults = ((int)($row['c'] ?? 0) === 0);
+        }
 
-	$res = $conn->query("SELECT COUNT(*) AS c FROM `apps`");
-	if ($res) {
-		$row = $res->fetch_assoc();
-		$should_seed_defaults = ((int)($row['c'] ?? 0) === 0);
-	}
+        if ($should_seed_defaults) {
+            $conn->query("
+                INSERT INTO `settings` (`setting_key`, `setting_value`)
+                VALUES
+                    ('dashboard_category_ids', '1,2,3,4,5,6,7'),
+                    ('schema_version', '1.2.0'),
+                    ('setup_complete', '1')
+                ON DUPLICATE KEY UPDATE
+                    `setting_value` = VALUES(`setting_value`)
+            ");
 
-	if ($should_seed_defaults) {	
-        $conn->query("
-            INSERT INTO `settings` (`setting_key`, `setting_value`)
-            VALUES
-                ('dashboard_category_ids', '1,2,3,4,5,6,7'),
-                ('schema_version', '1.2.0'),
-                ('setup_complete', '1')
-            ON DUPLICATE KEY UPDATE
-                `setting_value` = VALUES(`setting_value`)
-        ");
+            $conn->query("
+                INSERT INTO `apps` (`id`, `app_name`, `sort_order`, `is_active`)
+                VALUES
+                    (1, 'GoMining', 10, 1),
+                    (2, 'Atlas Earth', 20, 1)
+                ON DUPLICATE KEY UPDATE
+                    `app_name` = VALUES(`app_name`),
+                    `sort_order` = VALUES(`sort_order`),
+                    `is_active` = VALUES(`is_active`)
+            ");
 
-        // -------------------------------------------------
-        // APPS
-        // -------------------------------------------------
-        $conn->query("
-            INSERT INTO `apps` (`id`, `app_name`, `sort_order`, `is_active`)
-            VALUES
-                (1, 'GoMining', 10, 1),
-                (2, 'Atlas Earth', 20, 1)
-            ON DUPLICATE KEY UPDATE
-                `app_name` = VALUES(`app_name`),
-                `sort_order` = VALUES(`sort_order`),
-                `is_active` = VALUES(`is_active`)
-        ");
+            $conn->query("
+                INSERT INTO `accounts`
+                    (`id`, `account_name`, `account_type`, `account_identifier`, `notes`, `is_active`, `sort_order`)
+                VALUES
+                    (1, 'Cold Wallet', 'Wallet', '', 'Long term cold storage wallet', 1, 10),
+                    (2, 'GoMining BTC', 'Platform Wallet', '', 'BTC rewards held in GoMining', 1, 20),
+                    (3, 'GoMining GMT', 'Platform Wallet', '', 'GMT rewards held in GoMining', 1, 30),
+                    (4, 'Cash', 'Cash', '', 'Manual fiat or cash balance', 1, 40)
+                ON DUPLICATE KEY UPDATE
+                    `account_name` = VALUES(`account_name`),
+                    `account_type` = VALUES(`account_type`),
+                    `account_identifier` = VALUES(`account_identifier`),
+                    `notes` = VALUES(`notes`),
+                    `is_active` = VALUES(`is_active`),
+                    `sort_order` = VALUES(`sort_order`)
+            ");
 
-        // -------------------------------------------------
-        // ACCOUNTS
-        // -------------------------------------------------
-        $conn->query("
-            INSERT INTO `accounts`
-                (`id`, `account_name`, `account_type`, `account_identifier`, `notes`, `is_active`, `sort_order`)
-            VALUES
-                (1, 'Cold Wallet', 'Wallet', '', 'Long term cold storage wallet', 1, 10),
-                (2, 'GoMining BTC', 'Platform Wallet', '', 'BTC rewards held in GoMining', 1, 20),
-                (3, 'GoMining GMT', 'Platform Wallet', '', 'GMT rewards held in GoMining', 1, 30),
-                (4, 'Cash', 'Cash', '', 'Manual fiat or cash balance', 1, 40)
-            ON DUPLICATE KEY UPDATE
-                `account_name` = VALUES(`account_name`),
-                `account_type` = VALUES(`account_type`),
-                `account_identifier` = VALUES(`account_identifier`),
-                `notes` = VALUES(`notes`),
-                `is_active` = VALUES(`is_active`),
-                `sort_order` = VALUES(`sort_order`)
-        ");
+            $conn->query("
+                INSERT INTO `assets`
+                    (`id`, `asset_name`, `asset_symbol`, `currency_symbol`, `display_decimals`, `is_fiat`, `is_active`, `sort_order`)
+                VALUES
+                    (1, 'Bitcoin', 'BTC', '', 8, 0, 1, 10),
+                    (2, 'GoMining Token', 'GMT', '', 8, 0, 1, 20),
+                    (3, 'Binance Coin', 'BNB', '', 8, 0, 1, 30),
+                    (4, 'Ethereum', 'ETH', '', 8, 0, 1, 40),
+                    (5, 'Tether USD', 'USDT', '$', 2, 1, 1, 50),
+                    (6, 'US Dollar', 'USD', '$', 2, 1, 1, 60),
+                    (8, 'Euro', 'EUR', '€', 2, 1, 1, 65),
+                    (9, 'British Pound', 'GBP', '£', 2, 1, 1, 66),
+                    (10, 'Australian Dollar', 'AUD', 'A$', 2, 1, 1, 67),
+                    (11, 'Canadian Dollar', 'CAD', 'C$', 2, 1, 1, 68)
+                ON DUPLICATE KEY UPDATE
+                    `asset_name` = VALUES(`asset_name`),
+                    `asset_symbol` = VALUES(`asset_symbol`),
+                    `currency_symbol` = VALUES(`currency_symbol`),
+                    `display_decimals` = VALUES(`display_decimals`),
+                    `is_fiat` = VALUES(`is_fiat`),
+                    `is_active` = VALUES(`is_active`),
+                    `sort_order` = VALUES(`sort_order`)
+            ");
 
-        // -------------------------------------------------
-        // ASSETS
-        // -------------------------------------------------
-        $conn->query("
-            INSERT INTO `assets`
-                (`id`, `asset_name`, `asset_symbol`, `is_active`, `sort_order`)
-            VALUES
-                (1, 'Bitcoin', 'BTC', 1, 10),
-                (2, 'GoMining Token', 'GMT', 1, 20),
-                (3, 'Binance Coin', 'BNB', 1, 30),
-                (4, 'Ethereum', 'ETH', 1, 40),
-                (5, 'Tether USD', 'USDT', 1, 50),
-                (6, 'USD Dollar', 'USD', 1, 60),
-                (7, 'Cash', 'CASH', 1, 70)
-            ON DUPLICATE KEY UPDATE
-                `asset_name` = VALUES(`asset_name`),
-                `asset_symbol` = VALUES(`asset_symbol`),
-                `is_active` = VALUES(`is_active`),
-                `sort_order` = VALUES(`sort_order`)
-        ");
+            $conn->query("
+                INSERT INTO `categories`
+                    (`id`, `app_id`, `category_name`, `behavior_type`, `sort_order`, `dashboard_order`, `is_active`)
+                VALUES
+                    (1, 1, 'Referral Bonus', 'income', 10, 5, 1),
+                    (2, 1, 'veGoMining Reward', 'income', 20, 4, 1),
+                    (3, 1, 'Daily Gross Rewards', 'income', 30, 3, 1),
+                    (4, 1, 'Daily Net Rewards', 'income', 40, 0, 1),
+                    (5, 1, 'Daily Maintenance', 'expense', 50, 2, 1),
+                    (6, 1, 'Daily Electricity', 'expense', 60, 1, 1),
+                    (7, 1, 'Bounty Rewards', 'income', 70, 6, 1),
+                    (8, 2, 'Explorer Club', 'expense', 10, 0, 1),
+                    (9, 2, 'Monthly Reward Ladder Premium', 'expense', 20, 0, 1),
+                    (10, 2, 'AB Purchase', 'expense', 30, 0, 1),
+                    (11, 2, 'Cash Out', 'withdrawal', 40, 0, 1)
+                ON DUPLICATE KEY UPDATE
+                    `app_id` = VALUES(`app_id`),
+                    `category_name` = VALUES(`category_name`),
+                    `behavior_type` = VALUES(`behavior_type`),
+                    `sort_order` = VALUES(`sort_order`),
+                    `dashboard_order` = VALUES(`dashboard_order`),
+                    `is_active` = VALUES(`is_active`)
+            ");
 
-        // -------------------------------------------------
-        // CATEGORIES
-        // -------------------------------------------------
-        $conn->query("
-            INSERT INTO `categories`
-                (`id`, `app_id`, `category_name`, `behavior_type`, `sort_order`, `dashboard_order`, `is_active`)
-            VALUES
-                (1, 1, 'Referral Bonus', 'income', 10, 5, 1),
-                (2, 1, 'veGoMining Reward', 'income', 20, 4, 1),
-                (3, 1, 'Daily Gross Rewards', 'income', 30, 3, 1),
-                (4, 1, 'Daily Net Rewards', 'income', 40, 0, 1),
-                (5, 1, 'Daily Maintenance', 'expense', 50, 2, 1),
-                (6, 1, 'Daily Electricity', 'expense', 60, 1, 1),
-                (7, 1, 'Bounty Rewards', 'income', 70, 6, 1),
-                (8, 2, 'Explorer Club', 'expense', 10, 0, 1),
-                (9, 2, 'Monthly Reward Ladder Premium', 'expense', 20, 0, 1),
-                (10, 2, 'AB Purchase', 'expense', 30, 0, 1),
-                (11, 2, 'Cash Out', 'withdrawal', 40, 0, 1)
-            ON DUPLICATE KEY UPDATE
-                `app_id` = VALUES(`app_id`),
-                `category_name` = VALUES(`category_name`),
-                `behavior_type` = VALUES(`behavior_type`),
-                `sort_order` = VALUES(`sort_order`),
-                `dashboard_order` = VALUES(`dashboard_order`),
-                `is_active` = VALUES(`is_active`)
-        ");
+            $conn->query("
+                INSERT INTO `templates`
+                    (`id`, `app_id`, `template_name`, `notes`, `is_active`, `sort_order`)
+                VALUES
+                    (1, 1, 'Daily Rewards (GMT)', '', 1, 10)
+                ON DUPLICATE KEY UPDATE
+                    `app_id` = VALUES(`app_id`),
+                    `template_name` = VALUES(`template_name`),
+                    `notes` = VALUES(`notes`),
+                    `is_active` = VALUES(`is_active`),
+                    `sort_order` = VALUES(`sort_order`)
+            ");
 
-        // -------------------------------------------------
-        // DEFAULT TEMPLATE
-        // -------------------------------------------------
-        $conn->query("
-            INSERT INTO `templates`
-                (`id`, `app_id`, `template_name`, `notes`, `is_active`, `sort_order`)
-            VALUES
-                (1, 1, 'Daily Rewards (GMT)', '', 1, 10)
-            ON DUPLICATE KEY UPDATE
-                `app_id` = VALUES(`app_id`),
-                `template_name` = VALUES(`template_name`),
-                `notes` = VALUES(`notes`),
-                `is_active` = VALUES(`is_active`),
-                `sort_order` = VALUES(`sort_order`)
-        ");
+            $conn->query("
+                INSERT INTO `template_items`
+                    (`id`, `template_id`, `miner_id`, `asset_id`, `category_id`, `referral_id`,
+                     `from_account_id`, `to_account_id`, `amount`, `notes`,
+                     `show_miner`, `show_asset`, `show_category`, `show_referral`,
+                     `show_amount`, `show_notes`, `show_from_account`, `show_to_account`,
+                     `show_in_quick_add`, `quick_add_name`, `is_multi_add`, `sort_order`)
+                VALUES
+                    (1, 1, 0, 2, 3, 0, 0, 3, 0.00000000, '', 1, 1, 1, 0, 1, 1, 0, 1, 0, '', 0, 10),
+                    (2, 1, 0, 2, 5, 0, 3, 0, 0.00000000, '', 1, 1, 1, 0, 1, 1, 0, 1, 0, '', 0, 20),
+                    (3, 1, 0, 2, 6, 0, 3, 0, 0.00000000, '', 1, 1, 1, 0, 1, 1, 0, 1, 0, '', 0, 30),
+                    (5, 1, 0, 2, 4, 0, 0, 3, 0.00000000, '', 1, 1, 1, 0, 1, 1, 0, 1, 0, '', 0, 40)
+                ON DUPLICATE KEY UPDATE
+                    `template_id` = VALUES(`template_id`),
+                    `miner_id` = VALUES(`miner_id`),
+                    `asset_id` = VALUES(`asset_id`),
+                    `category_id` = VALUES(`category_id`),
+                    `referral_id` = VALUES(`referral_id`),
+                    `from_account_id` = VALUES(`from_account_id`),
+                    `to_account_id` = VALUES(`to_account_id`),
+                    `amount` = VALUES(`amount`),
+                    `notes` = VALUES(`notes`),
+                    `show_miner` = VALUES(`show_miner`),
+                    `show_asset` = VALUES(`show_asset`),
+                    `show_category` = VALUES(`show_category`),
+                    `show_referral` = VALUES(`show_referral`),
+                    `show_amount` = VALUES(`show_amount`),
+                    `show_notes` = VALUES(`show_notes`),
+                    `show_from_account` = VALUES(`show_from_account`),
+                    `show_to_account` = VALUES(`show_to_account`),
+                    `show_in_quick_add` = VALUES(`show_in_quick_add`),
+                    `quick_add_name` = VALUES(`quick_add_name`),
+                    `is_multi_add` = VALUES(`is_multi_add`),
+                    `sort_order` = VALUES(`sort_order`)
+            ");
 
-        // -------------------------------------------------
-        // DEFAULT TEMPLATE ITEMS
-        // -------------------------------------------------
-        $conn->query("
-            INSERT INTO `template_items`
-                (`id`, `template_id`, `miner_id`, `asset_id`, `category_id`, `referral_id`,
-                 `from_account_id`, `to_account_id`, `amount`, `notes`,
-                 `show_miner`, `show_asset`, `show_category`, `show_referral`,
-                 `show_amount`, `show_notes`, `show_from_account`, `show_to_account`,
-                 `show_in_quick_add`, `quick_add_name`, `sort_order`)
-            VALUES
-                (1, 1, 0, 2, 3, 0, 0, 3, 0.00000000, '', 1, 1, 1, 0, 1, 1, 0, 1, 0, '', 10),
-                (2, 1, 0, 2, 5, 0, 3, 0, 0.00000000, '', 1, 1, 1, 0, 1, 1, 0, 1, 0, '', 20),
-                (3, 1, 0, 2, 6, 0, 3, 0, 0.00000000, '', 1, 1, 1, 0, 1, 1, 0, 1, 0, '', 30),
-                (5, 1, 0, 2, 4, 0, 0, 3, 0.00000000, '', 1, 1, 1, 0, 1, 1, 0, 1, 0, '', 40)
-            ON DUPLICATE KEY UPDATE
-                `template_id` = VALUES(`template_id`),
-                `miner_id` = VALUES(`miner_id`),
-                `asset_id` = VALUES(`asset_id`),
-                `category_id` = VALUES(`category_id`),
-                `referral_id` = VALUES(`referral_id`),
-                `from_account_id` = VALUES(`from_account_id`),
-                `to_account_id` = VALUES(`to_account_id`),
-                `amount` = VALUES(`amount`),
-                `notes` = VALUES(`notes`),
-                `show_miner` = VALUES(`show_miner`),
-                `show_asset` = VALUES(`show_asset`),
-                `show_category` = VALUES(`show_category`),
-                `show_referral` = VALUES(`show_referral`),
-                `show_amount` = VALUES(`show_amount`),
-                `show_notes` = VALUES(`show_notes`),
-                `show_from_account` = VALUES(`show_from_account`),
-                `show_to_account` = VALUES(`show_to_account`),
-                `show_in_quick_add` = VALUES(`show_in_quick_add`),
-                `quick_add_name` = VALUES(`quick_add_name`),
-                `sort_order` = VALUES(`sort_order`)
-        ");
+            $conn->query("
+                INSERT INTO `quick_add_items`
+                    (`id`, `app_id`, `quick_add_name`, `miner_id`, `asset_id`, `category_id`,
+                     `referral_id`, `from_account_id`, `to_account_id`, `amount`, `notes`,
+                     `show_miner`, `show_asset`, `show_category`, `show_referral`,
+                     `show_amount`, `show_notes`, `show_from_account`, `show_to_account`,
+                     `is_multi_add`, `sort_order`, `is_active`)
+                VALUES
+                    (1, 1, 'Daily Gross Rewards - BTC', 0, 1, 3, 0, 0, 2, 0.00000000, '', 1, 1, 1, 0, 1, 0, 0, 1, 0, 10, 1),
+                    (2, 1, 'Daily Gross Rewards - GMT', 0, 2, 3, 0, 0, 3, 0.00000000, '', 1, 1, 1, 0, 1, 0, 0, 1, 0, 20, 1),
+                    (3, 1, 'Daily Net Rewards - BTC', 0, 1, 4, 0, 0, 2, 0.00000000, '', 1, 1, 1, 0, 1, 0, 0, 1, 0, 30, 1),
+                    (4, 1, 'Daily Net Rewards - GMT', 0, 2, 4, 0, 0, 3, 0.00000000, '', 1, 1, 1, 0, 1, 0, 0, 1, 0, 40, 1),
+                    (5, 1, 'Daily Maintenance - BTC', 0, 1, 5, 0, 2, 0, 0.00000000, '', 1, 1, 1, 0, 1, 0, 1, 0, 0, 50, 1),
+                    (6, 1, 'Daily Maintenance - GMT', 0, 2, 5, 0, 3, 0, 0.00000000, '', 1, 1, 1, 0, 1, 0, 1, 0, 0, 60, 1),
+                    (7, 1, 'Daily Electricity - BTC', 0, 1, 6, 0, 2, 0, 0.00000000, '', 1, 1, 1, 0, 1, 0, 1, 0, 0, 70, 1),
+                    (8, 1, 'Daily Electricity - GMT', 0, 2, 6, 0, 3, 0, 0.00000000, '', 1, 1, 1, 0, 1, 0, 1, 0, 0, 80, 1),
+                    (9, 1, 'Referral Bonus - GMT', 0, 2, 1, 0, 0, 3, 0.00000000, '', 0, 1, 1, 1, 1, 0, 0, 1, 0, 90, 1),
+                    (10, 1, 'veGoMining Reward - GMT', 0, 2, 2, 0, 0, 3, 0.00000000, '', 0, 1, 1, 1, 1, 0, 0, 1, 0, 100, 1),
+                    (11, 1, 'Bounty Reward - GMT', 0, 2, 7, 0, 0, 3, 0.00000000, '', 0, 1, 1, 1, 1, 0, 0, 1, 0, 110, 1),
+                    (12, 2, 'Monthly Reward Ladder Premium', 0, 6, 9, 0, 4, 0, 14.99000000, '', 0, 1, 1, 0, 1, 0, 1, 0, 0, 10, 1),
+                    (13, 2, 'Explorer Club', 0, 6, 8, 0, 4, 0, 49.99000000, '', 0, 1, 1, 0, 1, 0, 1, 0, 0, 20, 1),
+                    (14, 2, 'Cash Out', 0, 6, 11, 0, 0, 4, 0.00000000, '', 0, 1, 1, 0, 1, 0, 0, 1, 0, 30, 1)
+                ON DUPLICATE KEY UPDATE
+                    `app_id` = VALUES(`app_id`),
+                    `quick_add_name` = VALUES(`quick_add_name`),
+                    `miner_id` = VALUES(`miner_id`),
+                    `asset_id` = VALUES(`asset_id`),
+                    `category_id` = VALUES(`category_id`),
+                    `referral_id` = VALUES(`referral_id`),
+                    `from_account_id` = VALUES(`from_account_id`),
+                    `to_account_id` = VALUES(`to_account_id`),
+                    `amount` = VALUES(`amount`),
+                    `notes` = VALUES(`notes`),
+                    `show_miner` = VALUES(`show_miner`),
+                    `show_asset` = VALUES(`show_asset`),
+                    `show_category` = VALUES(`show_category`),
+                    `show_referral` = VALUES(`show_referral`),
+                    `show_amount` = VALUES(`show_amount`),
+                    `show_notes` = VALUES(`show_notes`),
+                    `show_from_account` = VALUES(`show_from_account`),
+                    `show_to_account` = VALUES(`show_to_account`),
+                    `is_multi_add` = VALUES(`is_multi_add`),
+                    `sort_order` = VALUES(`sort_order`),
+                    `is_active` = VALUES(`is_active`)
+            ");
 
-        // -------------------------------------------------
-        // DEFAULT QUICK ADDS
-        // -------------------------------------------------
-        $conn->query("
-            INSERT INTO `quick_add_items`
-                (`id`, `app_id`, `quick_add_name`, `miner_id`, `asset_id`, `category_id`,
-                 `referral_id`, `from_account_id`, `to_account_id`, `amount`, `notes`,
-                 `show_miner`, `show_asset`, `show_category`, `show_referral`,
-                 `show_amount`, `show_notes`, `show_from_account`, `show_to_account`,
-                 `sort_order`, `is_active`)
-            VALUES
-                (1, 1, 'Daily Gross Rewards - BTC', 0, 1, 3, 0, 0, 2, 0.00000000, '', 1, 1, 1, 0, 1, 0, 0, 1, 10, 1),
-                (2, 1, 'Daily Gross Rewards - GMT', 0, 2, 3, 0, 0, 3, 0.00000000, '', 1, 1, 1, 0, 1, 0, 0, 1, 20, 1),
-                (3, 1, 'Daily Net Rewards - BTC', 0, 1, 4, 0, 0, 2, 0.00000000, '', 1, 1, 1, 0, 1, 0, 0, 1, 30, 1),
-                (4, 1, 'Daily Net Rewards - GMT', 0, 2, 4, 0, 0, 3, 0.00000000, '', 1, 1, 1, 0, 1, 0, 0, 1, 40, 1),
-                (5, 1, 'Daily Maintenance - BTC', 0, 1, 5, 0, 2, 0, 0.00000000, '', 1, 1, 1, 0, 1, 0, 1, 0, 50, 1),
-                (6, 1, 'Daily Maintenance - GMT', 0, 2, 5, 0, 3, 0, 0.00000000, '', 1, 1, 1, 0, 1, 0, 1, 0, 60, 1),
-                (7, 1, 'Daily Electricity - BTC', 0, 1, 6, 0, 2, 0, 0.00000000, '', 1, 1, 1, 0, 1, 0, 1, 0, 70, 1),
-                (8, 1, 'Daily Electricity - GMT', 0, 2, 6, 0, 3, 0, 0.00000000, '', 1, 1, 1, 0, 1, 0, 1, 0, 80, 1),
-                (9, 1, 'Referral Bonus - GMT', 0, 2, 1, 0, 0, 3, 0.00000000, '', 0, 1, 1, 1, 1, 0, 0, 1, 90, 1),
-                (10, 1, 'veGoMining Reward - GMT', 0, 2, 2, 0, 0, 3, 0.00000000, '', 0, 1, 1, 1, 1, 0, 0, 1, 100, 1),
-                (11, 1, 'Bounty Reward - GMT', 0, 2, 7, 0, 0, 3, 0.00000000, '', 0, 1, 1, 1, 1, 0, 0, 1, 110, 1),
-                (12, 2, 'Monthly Reward Ladder Premium', 0, 7, 9, 0, 4, 0, 14.99000000, '', 0, 1, 1, 0, 1, 0, 1, 0, 10, 1),
-                (13, 2, 'Explorer Club', 0, 7, 8, 0, 4, 0, 49.99000000, '', 0, 1, 1, 0, 1, 0, 1, 0, 20, 1),
-                (14, 2, 'Cash Out', 0, 7, 11, 0, 0, 4, 0.00000000, '', 0, 1, 1, 0, 1, 0, 0, 1, 30, 1)
-            ON DUPLICATE KEY UPDATE
-                `app_id` = VALUES(`app_id`),
-                `quick_add_name` = VALUES(`quick_add_name`),
-                `miner_id` = VALUES(`miner_id`),
-                `asset_id` = VALUES(`asset_id`),
-                `category_id` = VALUES(`category_id`),
-                `referral_id` = VALUES(`referral_id`),
-                `from_account_id` = VALUES(`from_account_id`),
-                `to_account_id` = VALUES(`to_account_id`),
-                `amount` = VALUES(`amount`),
-                `notes` = VALUES(`notes`),
-                `show_miner` = VALUES(`show_miner`),
-                `show_asset` = VALUES(`show_asset`),
-                `show_category` = VALUES(`show_category`),
-                `show_referral` = VALUES(`show_referral`),
-                `show_amount` = VALUES(`show_amount`),
-                `show_notes` = VALUES(`show_notes`),
-                `show_from_account` = VALUES(`show_from_account`),
-                `show_to_account` = VALUES(`show_to_account`),
-                `sort_order` = VALUES(`sort_order`),
-                `is_active` = VALUES(`is_active`)
-        ");
-
-        // -------------------------------------------------
-        // AUTO_INCREMENT SAFETY
-        // -------------------------------------------------
-        $conn->query("ALTER TABLE `apps` AUTO_INCREMENT = 3");
-        $conn->query("ALTER TABLE `accounts` AUTO_INCREMENT = 5");
-        $conn->query("ALTER TABLE `assets` AUTO_INCREMENT = 8");
-        $conn->query("ALTER TABLE `categories` AUTO_INCREMENT = 12");
-        $conn->query("ALTER TABLE `templates` AUTO_INCREMENT = 2");
-        $conn->query("ALTER TABLE `template_items` AUTO_INCREMENT = 6");
-        $conn->query("ALTER TABLE `quick_add_items` AUTO_INCREMENT = 15");
-}
+            $conn->query("ALTER TABLE `apps` AUTO_INCREMENT = 3");
+            $conn->query("ALTER TABLE `accounts` AUTO_INCREMENT = 5");
+            $conn->query("ALTER TABLE `assets` AUTO_INCREMENT = 12");
+            $conn->query("ALTER TABLE `categories` AUTO_INCREMENT = 12");
+            $conn->query("ALTER TABLE `templates` AUTO_INCREMENT = 2");
+            $conn->query("ALTER TABLE `template_items` AUTO_INCREMENT = 6");
+            $conn->query("ALTER TABLE `quick_add_items` AUTO_INCREMENT = 15");
+        }
+    }
 }
 ?>

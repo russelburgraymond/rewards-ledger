@@ -24,6 +24,7 @@ $res = $conn->query("
         qa.to_account_id,
         qa.amount,
         qa.notes,
+		qa.is_multi_add,
         qa.show_miner,
         qa.show_asset,
         qa.show_category,
@@ -32,6 +33,7 @@ $res = $conn->query("
         qa.show_notes,
         qa.show_from_account,
         qa.show_to_account,
+		qa.is_multi_add,
         ap.app_name,
         m.miner_name,
         a.asset_name,
@@ -49,7 +51,7 @@ $res = $conn->query("
     LEFT JOIN accounts fa ON fa.id = qa.from_account_id
     LEFT JOIN accounts ta ON ta.id = qa.to_account_id
     WHERE qa.is_active = 1
-    ORDER BY ap.app_name ASC, qa.sort_order ASC, qa.quick_add_name ASC
+    ORDER BY qa.is_active DESC, qa.sort_order ASC, qa.id ASC
 ");
 
 if ($res) {
@@ -142,19 +144,48 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             ? (int)($_POST['to_account_id'] ?? 0)
             : (int)($quick_add['to_account_id'] ?? 0);
 
-        $amount_raw = ((int)$quick_add['show_amount'] === 1)
-            ? trim($_POST['amount'] ?? '')
-            : (string)($quick_add['amount'] ?? '0');
+		$is_multi_add = (int)($quick_add['is_multi_add'] ?? 0);
+
+		$amount_raw = ((int)$quick_add['show_amount'] === 1 && $is_multi_add !== 1)
+			? trim($_POST['amount'] ?? '')
+			: (string)($quick_add['amount'] ?? '0');
+
+		$amount_lines_raw = ((int)$quick_add['show_amount'] === 1 && $is_multi_add === 1)
+			? trim($_POST['amount_lines'] ?? '')
+			: '';
 
         $notes = ((int)$quick_add['show_notes'] === 1)
             ? trim($_POST['notes'] ?? '')
             : trim((string)($quick_add['notes'] ?? ''));
 
-        if ($category_id <= 0) {
-            $error = "Please choose a category.";
-        } elseif ($amount_raw !== '' && !is_numeric($amount_raw)) {
-            $error = "Please enter a valid amount.";
-        } else {
+			if ($category_id <= 0) {
+				$error = "Please choose a category.";
+			} elseif ($is_multi_add === 1) {
+				if ($amount_lines_raw === '') {
+					$error = "Please enter at least one amount.";
+				} else {
+					$amount_lines = preg_split('/\r\n|\r|\n/', $amount_lines_raw);
+					$valid_amounts = [];
+
+					foreach ($amount_lines as $line) {
+						$line = trim($line);
+						if ($line === '') {
+							continue;
+						}
+						if (!is_numeric($line)) {
+							$error = "One or more multi-add amounts are invalid.";
+							break;
+						}
+						$valid_amounts[] = (float)$line;
+					}
+
+					if ($error === '' && empty($valid_amounts)) {
+						$error = "Please enter at least one valid amount.";
+					}
+				}
+			} elseif ($amount_raw !== '' && !is_numeric($amount_raw)) {
+				$error = "Please enter a valid amount.";
+			} else {
             $amount = ($amount_raw === '') ? 0 : (float)$amount_raw;
 
             $stmt = $conn->prepare("
@@ -232,6 +263,9 @@ $res = $conn->query("
         m.miner_name,
         a.asset_name,
         a.asset_symbol,
+		a.currency_symbol,
+		a.display_decimals,
+		a.is_fiat,
         c.category_name,
         bi.amount,
         bi.notes
@@ -241,7 +275,7 @@ $res = $conn->query("
     LEFT JOIN miners m ON m.id = bi.miner_id
     LEFT JOIN assets a ON a.id = bi.asset_id
     LEFT JOIN categories c ON c.id = bi.category_id
-    ORDER BY bi.id DESC
+    ORDER BY qa.is_active DESC, qa.sort_order ASC, qa.id ASC
     LIMIT 10
 ");
 
@@ -394,19 +428,17 @@ if ($res) {
                         </div>
                     <?php endif; ?>
 
-                    <?php if ((int)$quick_add['show_amount'] === 1): ?>
-                        <div class="form-row">
-                            <label for="amount">Amount</label>
-                            <input type="text" id="amount" name="amount" value="<?= h($_POST['amount'] ?? (string)$quick_add['amount']) ?>" placeholder="Optional">
-                        </div>
-                    <?php endif; ?>
-
-                    <?php if ((int)$quick_add['show_notes'] === 1): ?>
-                        <div class="form-row">
-                            <label for="notes">Notes</label>
-                            <textarea id="notes" name="notes" rows="4"><?= h($_POST['notes'] ?? $quick_add['notes'] ?? '') ?></textarea>
-                        </div>
-                    <?php endif; ?>
+<?php if ((int)$quick_add['show_amount'] === 1): ?>
+    <div class="form-row">
+        <?php if ((int)($quick_add['is_multi_add'] ?? 0) === 1): ?>
+            <label for="amount_lines">Amount <span style="font-weight:normal;">(one per line)</span></label>
+            <textarea id="amount_lines" name="amount_lines" rows="6" placeholder="0.00012345&#10;0.00006789&#10;0.00025000"><?= h($_POST['amount_lines'] ?? '') ?></textarea>
+        <?php else: ?>
+            <label for="amount">Amount</label>
+            <input type="text" id="amount" name="amount" value="<?= h($_POST['amount'] ?? (string)$quick_add['amount']) ?>" placeholder="Optional">
+        <?php endif; ?>
+    </div>
+<?php endif; ?>
 
                     <button type="submit" class="btn btn-primary">Save Quick Entry</button>
                 </form>
@@ -426,6 +458,7 @@ if ($res) {
                 <table class="data-table">
                     <thead>
                         <tr>
+							<th style="width:40px;"></th>
                             <th style="width:70px;">ID</th>
                             <th style="width:120px;">Date</th>
                             <th>App</th>
@@ -435,9 +468,10 @@ if ($res) {
                             <th style="width:130px;">Amount</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="quick-add-sortable">
                         <?php foreach ($recent_entries as $e): ?>
-                            <tr>
+                            <tr data-id="<?= (int)$e['id'] ?>">
+								<td class="drag-handle">☰</td>
                                 <td><?= (int)$e['id'] ?></td>
                                 <td><?= h($e['batch_date']) ?></td>
                                 <td><?= h($e['app_name'] ?? '') ?></td>
@@ -449,7 +483,12 @@ if ($res) {
                                     <?php endif; ?>
                                 </td>
                                 <td><?= h($e['category_name'] ?? '') ?></td>
-                                <td><?= h(number_format((float)$e['amount'], 8, '.', ',')) ?></td>
+                                <td><?= h(fmt_asset_value(
+									$e['amount'],
+									(string)($e['currency_symbol'] ?? ''),
+									(int)($e['display_decimals'] ?? 8),
+									(int)($e['is_fiat'] ?? 0)
+								)) ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -458,3 +497,34 @@ if ($res) {
         <?php endif; ?>
     </div>
 </div>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const el = document.getElementById('quick-add-sortable');
+    if (!el) return;
+
+    new Sortable(el, {
+        handle: '.drag-handle',
+        animation: 150,
+        ghostClass: 'sortable-ghost',
+        onEnd: function () {
+            const rows = el.querySelectorAll('tr');
+            const order = [];
+
+            rows.forEach((row, index) => {
+                order.push({
+                    id: row.dataset.id,
+                    sort_order: index
+                });
+            });
+
+            fetch('quick_adds_reorder.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(order)
+            });
+        }
+    });
+});
+</script>

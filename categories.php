@@ -16,10 +16,6 @@ if (isset($_GET['updated'])) {
     $success = "Category updated successfully.";
 }
 
-if (isset($_GET['toggled'])) {
-    $success = "Category status updated.";
-}
-
 /* -----------------------------
    LOAD APPS
 ----------------------------- */
@@ -74,7 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt->execute();
                     $stmt->close();
 
-                    header("Location: index.php?page=categories&updated=1");
+                    header("Location: index.php?page=settings&tab=categories&updated=1");
                     exit;
                 } else {
                     $error = "Could not update category: " . $conn->error;
@@ -90,38 +86,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmt->execute();
                     $stmt->close();
 
-                    header("Location: index.php?page=categories&added=1");
+                    header("Location: index.php?page=settings&tab=categories&added=1");
                     exit;
                 } else {
                     $error = "Could not add category: " . $conn->error;
                 }
             }
-        }
-    }
-}
-
-/* -----------------------------
-   HANDLE TOGGLE ACTIVE
------------------------------ */
-if (isset($_GET['toggle'])) {
-    $toggle_id = (int)($_GET['toggle'] ?? 0);
-
-    if ($toggle_id > 0) {
-        $stmt = $conn->prepare("
-            UPDATE categories
-            SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END
-            WHERE id = ?
-        ");
-
-        if ($stmt) {
-            $stmt->bind_param("i", $toggle_id);
-            $stmt->execute();
-            $stmt->close();
-
-            header("Location: index.php?page=categories&toggled=1");
-            exit;
-        } else {
-            $error = "Could not change category status: " . $conn->error;
         }
     }
 }
@@ -180,7 +150,7 @@ $result = $conn->query("
         a.app_name
     FROM categories c
     LEFT JOIN apps a ON a.id = c.app_id
-    ORDER BY c.is_active DESC, a.app_name ASC, c.sort_order ASC, c.category_name ASC, c.id ASC
+    ORDER BY c.is_active DESC, c.sort_order ASC, c.id ASC
 ");
 
 if ($result) {
@@ -271,13 +241,14 @@ if ($result) {
             </button>
 
             <?php if ((int)$edit['id'] > 0): ?>
-                <a class="btn btn-secondary" href="index.php?page=categories">Cancel Edit</a>
+                <a class="btn btn-secondary" href="index.php?page=settings&tab=categories">Cancel Edit</a>
             <?php endif; ?>
         </form>
     </div>
 
     <div class="card">
         <h3>Category List</h3>
+        <p class="subtext">Sort Order controls how categories appear in dropdowns. Drag-and-drop reorder can be added next.</p>
 
         <?php if (!$categories): ?>
             <p class="subtext">No categories saved yet.</p>
@@ -285,19 +256,20 @@ if ($result) {
             <div class="table-wrap">
                 <table class="data-table">
                     <thead>
-                        <tr>
+					    <tr>
+							<th style="width:40px;"></th>
                             <th>App</th>
                             <th>Name</th>
                             <th style="width:140px;">Behavior</th>
                             <th style="width:100px;">Sort</th>
                             <th style="width:100px;">Status</th>
                             <th style="width:90px;">Edit</th>
-                            <th style="width:110px;">Toggle</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="category-sortable">
                         <?php foreach ($categories as $c): ?>
-                            <tr>
+                            <tr data-id="<?= (int)$c['id'] ?>">
+								<td class="drag-handle">☰</td>
                                 <td><?= h($c['app_name'] ?? '') ?></td>
                                 <td><?= h($c['category_name']) ?></td>
                                 <td><?= h($c['behavior_type']) ?></td>
@@ -310,14 +282,7 @@ if ($result) {
                                     <?php endif; ?>
                                 </td>
                                 <td>
-                                    <a class="table-link" href="index.php?page=categories&edit=<?= (int)$c['id'] ?>">Edit</a>
-                                </td>
-                                <td>
-                                    <?php if ((int)$c['is_active'] === 1): ?>
-                                        <a class="table-link" href="index.php?page=categories&toggle=<?= (int)$c['id'] ?>">Deactivate</a>
-                                    <?php else: ?>
-                                        <a class="table-link" href="index.php?page=categories&toggle=<?= (int)$c['id'] ?>">Reactivate</a>
-                                    <?php endif; ?>
+                                    <a class="table-link" href="index.php?page=settings&tab=categories&edit=<?= (int)$c['id'] ?>">Edit</a>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -327,3 +292,36 @@ if ($result) {
         <?php endif; ?>
     </div>
 </div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const el = document.getElementById('category-sortable');
+
+    if (!el) return;
+
+    new Sortable(el, {
+        handle: '.drag-handle',
+        animation: 150,
+		ghostClass: 'sortable-ghost',
+        onEnd: function () {
+            const rows = el.querySelectorAll('tr');
+            const order = [];
+
+            rows.forEach((row, index) => {
+                order.push({
+                    id: row.dataset.id,
+                    sort_order: index
+                });
+            });
+
+            fetch('categories_reorder.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(order)
+            });
+        }
+    });
+});
+</script>
