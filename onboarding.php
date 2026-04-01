@@ -73,6 +73,20 @@ PHP_CONFIG;
     }
 }
 
+if (!function_exists('onboarding_normalize_label')) {
+    function onboarding_normalize_label(string $value): string {
+        $value = trim($value);
+        $value = preg_replace('/\s+/', ' ', $value) ?? $value;
+        return mb_strtolower($value, 'UTF-8');
+    }
+}
+
+if (!function_exists('onboarding_labels_match')) {
+    function onboarding_labels_match(string $left, string $right): bool {
+        return onboarding_normalize_label($left) === onboarding_normalize_label($right);
+    }
+}
+
 if (!function_exists('onboarding_step_class')) {
     function onboarding_step_class(int $current_step, int $step_number): string {
         if ($step_number < $current_step) return 'completed';
@@ -273,7 +287,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             $name = trim($line);
             if ($name === '') continue;
 
-            $key = mb_strtolower($name);
+            $key = onboarding_normalize_label($name);
             if (isset($seen[$key])) continue;
 
             $seen[$key] = true;
@@ -342,7 +356,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             $name = trim($line);
             if ($name === '') continue;
 
-            $key = mb_strtolower($name);
+            $key = onboarding_normalize_label($name);
             if (isset($seen[$key])) continue;
 
             $seen[$key] = true;
@@ -425,7 +439,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                 continue;
             }
 
-            $seen_key = mb_strtolower($asset_symbol);
+            $seen_key = onboarding_normalize_label($asset_symbol);
             if (isset($seen_codes[$seen_key])) {
                 continue;
             }
@@ -444,21 +458,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                 $sort_order = (int)($rowMax['max_sort'] ?? 0);
             }
 
-            $stmtCheck = $conn->prepare("\n                SELECT id\n                FROM assets\n                WHERE UPPER(asset_symbol) = UPPER(?)\n                LIMIT 1\n            ");
-
             $stmtInsert = $conn->prepare("\n                INSERT INTO assets (\n                    asset_name,\n                    asset_symbol,\n                    currency_symbol,\n                    display_decimals,\n                    is_fiat,\n                    is_active,\n                    sort_order\n                )\n                VALUES (?, ?, '', 8, 0, 1, ?)\n            ");
 
-            if (!$stmtCheck || !$stmtInsert) {
+            if (!$stmtInsert) {
                 $error = "Could not prepare asset statements: " . $conn->error;
             } else {
                 foreach ($parsed_assets as $asset) {
                     $existing_id = 0;
 
-                    $stmtCheck->bind_param("s", $asset['asset_symbol']);
-                    $stmtCheck->execute();
-                    $resCheck = $stmtCheck->get_result();
-                    if ($resCheck && $rowCheck = $resCheck->fetch_assoc()) {
-                        $existing_id = (int)($rowCheck['id'] ?? 0);
+                    $resExisting = $conn->query("SELECT id, asset_name, asset_symbol FROM assets");
+                    if ($resExisting) {
+                        while ($rowExisting = $resExisting->fetch_assoc()) {
+                            $same_name = onboarding_labels_match((string)($rowExisting['asset_name'] ?? ''), $asset['asset_name']);
+                            $same_symbol = onboarding_labels_match((string)($rowExisting['asset_symbol'] ?? ''), $asset['asset_symbol']);
+
+                            if ($same_name || $same_symbol) {
+                                $existing_id = (int)($rowExisting['id'] ?? 0);
+                                break;
+                            }
+                        }
                     }
 
                     if ($existing_id > 0) {
@@ -470,7 +488,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                     $stmtInsert->execute();
                 }
 
-                $stmtCheck->close();
                 $stmtInsert->close();
             }
         }
@@ -499,7 +516,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             $name = trim($line);
             if ($name === '') continue;
 
-            $key = mb_strtolower($name);
+            $key = onboarding_normalize_label($name);
             if (isset($seen[$key])) continue;
 
             $seen[$key] = true;
@@ -568,7 +585,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             $name = trim($line);
             if ($name === '') continue;
 
-            $key = mb_strtolower($name);
+            $key = onboarding_normalize_label($name);
             if (isset($seen[$key])) continue;
 
             $seen[$key] = true;
@@ -887,11 +904,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'finis
         <?php endif; ?>
 
         <p class="subtext">
-            Add any additional assets below (optional).
+            Only add assets here if they are truly new. Do not re-add BTC, GoMining Token (GMT), USD, or other defaults you already see above.
         </p>
 
         <p class="subtext">
-            Format: <strong>Name|CODE</strong>
+            Format: <strong>Name|CODE</strong>. Similar names or codes will be skipped to help prevent duplicates.
         </p>
 
         <form method="post">

@@ -76,6 +76,58 @@ function fmt_asset_value($value, string $currency_symbol = '', int $display_deci
     return $formatted;
 }
 
+
+function rl_normalize_label(string $value): string
+{
+    $value = trim($value);
+    $value = preg_replace('/\s+/', ' ', $value) ?? $value;
+    return mb_strtolower($value, 'UTF-8');
+}
+
+function rl_labels_match(string $left, string $right): bool
+{
+    return rl_normalize_label($left) === rl_normalize_label($right);
+}
+
+function rl_find_duplicate_id(mysqli $conn, string $table, string $column, string $value, int $exclude_id = 0, array $extra_where = []): int
+{
+    if (!preg_match('/^[A-Za-z0-9_]+$/', $table) || !preg_match('/^[A-Za-z0-9_]+$/', $column)) {
+        return 0;
+    }
+
+    $sql = "SELECT id, `" . $column . "` AS compare_value FROM `" . $table . "` WHERE 1=1";
+
+    if ($exclude_id > 0) {
+        $sql .= " AND id <> " . (int)$exclude_id;
+    }
+
+    foreach ($extra_where as $where_col => $where_val) {
+        if (!preg_match('/^[A-Za-z0-9_]+$/', (string)$where_col)) {
+            continue;
+        }
+
+        if (is_int($where_val) || ctype_digit((string)$where_val)) {
+            $sql .= " AND `" . $where_col . "` = " . (int)$where_val;
+        } else {
+            $sql .= " AND `" . $where_col . "` = '" . $conn->real_escape_string((string)$where_val) . "'";
+        }
+    }
+
+    $result = $conn->query($sql);
+
+    if (!$result) {
+        return 0;
+    }
+
+    while ($row = $result->fetch_assoc()) {
+        if (rl_labels_match((string)($row['compare_value'] ?? ''), $value)) {
+            return (int)($row['id'] ?? 0);
+        }
+    }
+
+    return 0;
+}
+
 function batch_entry_notice_html(): string {
     return '<div class="batch-note"><strong>Batch Entry:</strong> This item was entered together with other items. Changing shared fields like date will update all items in this batch.</div>';
 }

@@ -5,9 +5,24 @@ require 'helpers.php';
 
 $begin_date = trim($_GET['begin_date'] ?? '');
 $end_date = trim($_GET['end_date'] ?? '');
-$app_id_filter = (int)($_GET['app_id'] ?? 0);
-$category_id_filter = (int)($_GET['category_id'] ?? 0);
-$asset_id_filter = (int)($_GET['asset_id'] ?? 0);
+
+$app_ids_filter = $_GET['app_ids'] ?? [];
+if (!is_array($app_ids_filter)) {
+    $app_ids_filter = [];
+}
+$app_ids_filter = array_values(array_filter(array_map('intval', $app_ids_filter), fn($v) => $v > 0));
+
+$category_ids_filter = $_GET['category_ids'] ?? [];
+if (!is_array($category_ids_filter)) {
+    $category_ids_filter = [];
+}
+$category_ids_filter = array_values(array_filter(array_map('intval', $category_ids_filter), fn($v) => $v > 0));
+
+$asset_ids_filter = $_GET['asset_ids'] ?? [];
+if (!is_array($asset_ids_filter)) {
+    $asset_ids_filter = [];
+}
+$asset_ids_filter = array_values(array_filter(array_map('intval', $asset_ids_filter), fn($v) => $v > 0));
 
 $where_sql = " WHERE 1 = 1 ";
 $params = [];
@@ -25,22 +40,31 @@ if ($end_date !== '') {
     $params[] = $end_date;
 }
 
-if ($app_id_filter > 0) {
-    $where_sql .= " AND b.app_id = ?";
-    $types .= "i";
-    $params[] = $app_id_filter;
+if (!empty($app_ids_filter)) {
+    $placeholders = implode(',', array_fill(0, count($app_ids_filter), '?'));
+    $where_sql .= " AND b.app_id IN ($placeholders)";
+    $types .= str_repeat('i', count($app_ids_filter));
+    foreach ($app_ids_filter as $id) {
+        $params[] = $id;
+    }
 }
 
-if ($category_id_filter > 0) {
-    $where_sql .= " AND bi.category_id = ?";
-    $types .= "i";
-    $params[] = $category_id_filter;
+if (!empty($category_ids_filter)) {
+    $placeholders = implode(',', array_fill(0, count($category_ids_filter), '?'));
+    $where_sql .= " AND bi.category_id IN ($placeholders)";
+    $types .= str_repeat('i', count($category_ids_filter));
+    foreach ($category_ids_filter as $id) {
+        $params[] = $id;
+    }
 }
 
-if ($asset_id_filter > 0) {
-    $where_sql .= " AND bi.asset_id = ?";
-    $types .= "i";
-    $params[] = $asset_id_filter;
+if (!empty($asset_ids_filter)) {
+    $placeholders = implode(',', array_fill(0, count($asset_ids_filter), '?'));
+    $where_sql .= " AND bi.asset_id IN ($placeholders)";
+    $types .= str_repeat('i', count($asset_ids_filter));
+    foreach ($asset_ids_filter as $id) {
+        $params[] = $id;
+    }
 }
 
 /* Totals */
@@ -55,6 +79,7 @@ $sql_totals = "
         COALESCE(SUM(
             CASE
                 WHEN c.behavior_type IN ('expense', 'withdrawal', 'investment') THEN -1 * bi.amount
+                WHEN c.behavior_type IN ('transfer', 'neutral') THEN 0
                 ELSE bi.amount
             END
         ), 0) AS total_amount
@@ -135,13 +160,21 @@ if ($stmt) {
     $stmt->close();
 }
 
-function filter_label(array $items, int $id, string $idKey, string $nameKey): string {
+function filter_labels(array $items, array $ids, string $idKey, string $nameKey): string {
+    if (empty($ids)) {
+        return 'All';
+    }
+
+    $ids = array_map('intval', $ids);
+    $names = [];
+
     foreach ($items as $item) {
-        if ((int)$item[$idKey] === $id) {
-            return (string)$item[$nameKey];
+        if (in_array((int)$item[$idKey], $ids, true)) {
+            $names[] = (string)$item[$nameKey];
         }
     }
-    return 'All';
+
+    return $names ? implode(', ', $names) : 'All';
 }
 
 $apps = [];
@@ -234,9 +267,9 @@ if ($res) while ($row = $res->fetch_assoc()) $assets[] = $row;
     <div class="meta">
         <div><strong>Begin Date:</strong> <?= h($begin_date !== '' ? $begin_date : 'All') ?></div>
         <div><strong>End Date:</strong> <?= h($end_date !== '' ? $end_date : 'All') ?></div>
-        <div><strong>App:</strong> <?= h($app_id_filter > 0 ? filter_label($apps, $app_id_filter, 'id', 'app_name') : 'All') ?></div>
-        <div><strong>Category:</strong> <?= h($category_id_filter > 0 ? filter_label($categories, $category_id_filter, 'id', 'category_name') : 'All') ?></div>
-        <div><strong>Asset:</strong> <?= h($asset_id_filter > 0 ? filter_label($assets, $asset_id_filter, 'id', 'asset_name') : 'All') ?></div>
+        <div><strong>Apps:</strong> <?= h(filter_labels($apps, $app_ids_filter, 'id', 'app_name')) ?></div>
+        <div><strong>Categories:</strong> <?= h(filter_labels($categories, $category_ids_filter, 'id', 'category_name')) ?></div>
+        <div><strong>Assets:</strong> <?= h(filter_labels($assets, $asset_ids_filter, 'id', 'asset_name')) ?></div>
         <div><strong>Generated:</strong> <?= h(date('Y-m-d H:i:s')) ?></div>
     </div>
 

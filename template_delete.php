@@ -1,9 +1,11 @@
 <?php
 
 $template_id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+$from_context = trim((string)($_GET['from'] ?? ''));
+$back_href = ($from_context === 'settings_templates') ? 'index.php?page=quick_adds' : 'index.php?page=templates';
 
 if ($template_id <= 0) {
-    echo "<script>window.location='index.php?page=templates&msg=invalid_template';</script>";
+    echo "<script>window.location='" . $back_href . "&msg=invalid_template';</script>";
     exit;
 }
 
@@ -81,13 +83,13 @@ if ($error === '') {
 }
 
 if ($deleted) {
-    echo "<script>window.location='index.php?page=templates&msg=template_deleted';</script>";
+    echo "<script>window.location='" . $back_href . "&msg=template_deleted';</script>";
     exit;
 }
 
 echo "<div class='card'>";
 echo "<h2>Could not delete template</h2>";
 echo "<p>" . h($error) . "</p>";
-echo "<p><a class='btn btn-secondary' href='index.php?page=templates'>Back to Templates</a></p>";
+echo "<p><a class='btn btn-secondary' href='" . h($back_href) . "'>Back</a></p>";
 echo "</div>";
 exit;

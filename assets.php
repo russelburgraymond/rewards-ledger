@@ -35,100 +35,76 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($asset_symbol === '') {
         $error = "Asset code is required.";
     } else {
-        // duplicate check by asset symbol
-        if ($id > 0) {
-            $stmtDup = $conn->prepare("
-                SELECT id
-                FROM assets
-                WHERE asset_symbol = ?
-                  AND id <> ?
-                LIMIT 1
-            ");
-            $stmtDup->bind_param("si", $asset_symbol, $id);
+        $duplicate_by_symbol = rl_find_duplicate_id($conn, 'assets', 'asset_symbol', $asset_symbol, $id);
+        $duplicate_by_name = rl_find_duplicate_id($conn, 'assets', 'asset_name', $asset_name, $id);
+
+        if ($duplicate_by_symbol > 0) {
+            $error = "An asset with that code already exists.";
+        } elseif ($duplicate_by_name > 0) {
+            $error = "An asset with that name already exists.";
         } else {
-            $stmtDup = $conn->prepare("
-                SELECT id
-                FROM assets
-                WHERE asset_symbol = ?
-                LIMIT 1
-            ");
-            $stmtDup->bind_param("s", $asset_symbol);
-        }
+            if ($id > 0) {
+                $stmt = $conn->prepare("
+                    UPDATE assets
+                    SET
+                        asset_name = ?,
+                        asset_symbol = ?,
+                        currency_symbol = ?,
+                        display_decimals = ?,
+                        is_fiat = ?,
+                        is_active = ?
+                    WHERE id = ?
+                ");
 
-        if (!$stmtDup) {
-            $error = "Could not validate asset: " . $conn->error;
-        } else {
-            $stmtDup->execute();
-            $dupRes = $stmtDup->get_result();
-            $duplicate = $dupRes ? $dupRes->fetch_assoc() : null;
-            $stmtDup->close();
+                if ($stmt) {
+                    $stmt->bind_param(
+                        "sssiiii",
+                        $asset_name,
+                        $asset_symbol,
+                        $currency_symbol,
+                        $display_decimals,
+                        $is_fiat,
+                        $is_active,
+                        $id
+                    );
+                    $stmt->execute();
+                    $stmt->close();
 
-            if ($duplicate) {
-                $error = "An asset with that code already exists.";
-            } else {
-                if ($id > 0) {
-                    $stmt = $conn->prepare("
-                        UPDATE assets
-                        SET
-                            asset_name = ?,
-                            asset_symbol = ?,
-                            currency_symbol = ?,
-                            display_decimals = ?,
-                            is_fiat = ?,
-                            is_active = ?
-                        WHERE id = ?
-                    ");
-
-                    if ($stmt) {
-                        $stmt->bind_param(
-                            "sssiiii",
-                            $asset_name,
-                            $asset_symbol,
-                            $currency_symbol,
-                            $display_decimals,
-                            $is_fiat,
-                            $is_active,
-                            $id
-                        );
-                        $stmt->execute();
-                        $stmt->close();
-
-                        header("Location: index.php?page=settings&tab=assets&updated=1");
-                        exit;
-                    } else {
-                        $error = "Could not update asset: " . $conn->error;
-                    }
+                    header("Location: index.php?page=settings&tab=assets&updated=1");
+                    exit;
                 } else {
-                    $stmt = $conn->prepare("
-                        INSERT INTO assets (
-                            asset_name,
-                            asset_symbol,
-                            currency_symbol,
-                            display_decimals,
-                            is_fiat,
-                            is_active
-                        )
-                        VALUES (?, ?, ?, ?, ?, ?)
-                    ");
+                    $error = "Could not update asset: " . $conn->error;
+                }
+            } else {
+                $stmt = $conn->prepare("
+                    INSERT INTO assets (
+                        asset_name,
+                        asset_symbol,
+                        currency_symbol,
+                        display_decimals,
+                        is_fiat,
+                        is_active
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ");
 
-                    if ($stmt) {
-                        $stmt->bind_param(
-                            "sssiii",
-                            $asset_name,
-                            $asset_symbol,
-                            $currency_symbol,
-                            $display_decimals,
-                            $is_fiat,
-                            $is_active
-                        );
-                        $stmt->execute();
-                        $stmt->close();
+                if ($stmt) {
+                    $stmt->bind_param(
+                        "sssiii",
+                        $asset_name,
+                        $asset_symbol,
+                        $currency_symbol,
+                        $display_decimals,
+                        $is_fiat,
+                        $is_active
+                    );
+                    $stmt->execute();
+                    $stmt->close();
 
-                        header("Location: index.php?page=settings&tab=assets&added=1");
-                        exit;
-                    } else {
-                        $error = "Could not add asset: " . $conn->error;
-                    }
+                    header("Location: index.php?page=settings&tab=assets&added=1");
+                    exit;
+                } else {
+                    $error = "Could not add asset: " . $conn->error;
                 }
             }
         }
@@ -308,8 +284,10 @@ if ($result) {
         <?php else: ?>
             <div class="table-wrap">
                 <table class="data-table">
+					
                     <thead>
                         <tr>
+							<th style="width:40px;"></th>
                             <th style="width:70px;">ID</th>
                             <th>Name</th>
                             <th style="width:90px;">Code</th>
@@ -320,9 +298,10 @@ if ($result) {
                             <th style="width:90px;">Edit</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="asset-sortable">
                         <?php foreach ($assets as $a): ?>
-                            <tr>
+                            <tr data-id="<?= (int)$a['id'] ?>">
+								<td class="drag-handle" style="cursor:grab; text-align:center;">☰</td>
                                 <td><?= (int)$a['id'] ?></td>
                                 <td><?= h($a['asset_name']) ?></td>
                                 <td><?= h($a['asset_symbol']) ?></td>
@@ -353,3 +332,34 @@ if ($result) {
         <?php endif; ?>
     </div>
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const el = document.getElementById('asset-sortable');
+
+    if (!el) return;
+
+    new Sortable(el, {
+        animation: 150,
+        ghostClass: 'dragging',
+		handle: '.drag-handle',
+
+        onEnd: function () {
+            const rows = el.querySelectorAll('tr');
+            const order = [];
+
+            rows.forEach((row, index) => {
+                order.push({
+                    id: row.dataset.id,
+                    sort_order: index
+                });
+            });
+
+            fetch('index.php?page=assets_reorder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(order)
+            });
+        }
+    });
+});
+</script>

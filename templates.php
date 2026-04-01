@@ -29,7 +29,7 @@ $res = $conn->query("
     LEFT JOIN apps a ON a.id = t.app_id
     LEFT JOIN template_items ti ON ti.template_id = t.id
     GROUP BY t.id, t.template_name, t.app_id, a.app_name
-    ORDER BY a.app_name ASC, t.template_name ASC, t.id ASC
+    ORDER BY t.sort_order ASC, t.id ASC, a.app_name ASC, t.template_name ASC
 ");
 
 if ($res) {
@@ -46,9 +46,6 @@ if ($res) {
     <p class="subtext">Create reusable templates and use them to enter real reward data.</p>
 </div>
 
-<div class="page-actions" style="margin-bottom:20px;">
-    <a class="btn btn-primary" href="index.php?page=template_edit">Create New Template</a>
-</div>
 
 <?php if ($error !== ''): ?>
     <div class="alert alert-error"><?= h($error) ?></div>

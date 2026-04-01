@@ -2,10 +2,17 @@
 
 $current_page = 'templates';
 
+$price_lookup_enabled = get_setting($conn, 'enable_price_lookup', '1') === '1';
+
 $error = "";
 $success = "";
 
 $template_id = (int)($_GET['id'] ?? 0);
+
+
+$ti_has_received_time = function_exists('rl_column_exists') ? rl_column_exists($conn, 'template_items', 'show_received_time') : false;
+$ti_has_value_at_receipt = function_exists('rl_column_exists') ? rl_column_exists($conn, 'template_items', 'show_value_at_receipt') : false;
+
 
 if ($template_id <= 0) {
     echo "<div class='card'><h2>Template not found</h2><p class='subtext'>A valid template ID was not provided.</p></div>";
@@ -137,6 +144,8 @@ $stmt = $conn->prepare("
         ti.show_referral,
         ti.show_amount,
         ti.show_notes,
+        " . ($ti_has_received_time ? "ti.show_received_time" : "1") . " AS show_received_time,
+        " . ($ti_has_value_at_receipt ? "ti.show_value_at_receipt" : "1") . " AS show_value_at_receipt,
         ti.show_from_account,
         ti.show_to_account,
         ti.is_multi_add,
@@ -218,6 +227,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         $from_account_ids = $_POST['from_account_id'] ?? [];
         $to_account_ids = $_POST['to_account_id'] ?? [];
         $amounts = $_POST['amount'] ?? [];
+        $received_times = $_POST['received_time'] ?? [];
+        $value_at_receipts = $_POST['value_at_receipt'] ?? [];
         $line_notes = $_POST['line_notes'] ?? [];
 
         foreach ($_POST['line_template_id'] as $idx => $template_line_id) {
@@ -228,6 +239,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             $from_account_id = (int)($from_account_ids[$idx] ?? 0);
             $to_account_id = (int)($to_account_ids[$idx] ?? 0);
             $amount_raw = trim((string)($amounts[$idx] ?? '0'));
+            $received_time_raw = trim((string)($received_times[$idx] ?? ''));
+            $value_at_receipt_raw = trim((string)($value_at_receipts[$idx] ?? ''));
             $notes_value = trim((string)($line_notes[$idx] ?? ''));
 
             if ($amount_raw === '' || !is_numeric($amount_raw)) {
@@ -235,6 +248,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             } else {
                 $amount = (float)$amount_raw;
             }
+
+            $received_time = ($received_time_raw !== '' && preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $received_time_raw))
+                ? $received_time_raw
+                : null;
+            $value_at_receipt = ($value_at_receipt_raw !== '' && is_numeric($value_at_receipt_raw))
+                ? (float)$value_at_receipt_raw
+                : null;
 
             $stmt = $conn->prepare("
                 INSERT INTO batch_items (
@@ -246,9 +266,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                     from_account_id,
                     to_account_id,
                     amount,
-                    notes
+                    received_time,
+                    value_at_receipt,
+                    notes,
+                    import_source_type
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ");
 
             if (!$stmt) {
@@ -256,18 +279,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                 break;
             }
 
-            $stmt->bind_param(
-                "iiiiiiids",
-                $batch_id,
-                $miner_id,
-                $asset_id,
-                $category_id,
-                $referral_id,
-                $from_account_id,
-                $to_account_id,
-                $amount,
-                $notes_value
-            );
+			$import_source_type = 'template';
+
+			$stmt->bind_param(
+				"iiiiiiidsdss",
+				$batch_id,
+				$miner_id,
+				$asset_id,
+				$category_id,
+				$referral_id,
+				$from_account_id,
+				$to_account_id,
+				$amount,
+				$received_time,
+				$value_at_receipt,
+				$notes_value,
+				$import_source_type
+			);
             $stmt->execute();
             $stmt->close();
         }
@@ -344,6 +372,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                             <th>From</th>
                             <th>To</th>
                             <th>Amount</th>
+                            <th>Time</th>
+                            <th>Receipt Value</th>
                             <th>Notes</th>
                         </tr>
                     </thead>
@@ -452,20 +482,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
                                 <td>
                                     <?php if ((int)$line['show_amount'] === 1): ?>
-                                        <input
-                                            type="text"
-                                            name="amount[]"
-                                            value="<?= h($_POST['amount'][$index] ?? (string)$line['amount']) ?>"
-                                            placeholder="Optional"
-                                        >
+<?php
+$amountVal = $_POST['amount'][$index] ?? $line['amount'];
+$amountVal = ($amountVal === null || $amountVal === '' || (float)$amountVal == 0.0)
+    ? ''
+    : $amountVal;
+?>
+
+<input
+    type="text"
+    name="amount[]"
+    value="<?= h($amountVal) ?>"
+    placeholder="0.000000"
+    onfocus="this.select()"
+>
+                                    <?php endif; ?>
+                                </td>
+
+                                <td>
+                                    <?php if ((int)$line['show_received_time'] === 1): ?>
+                                        <input type="time" name="received_time[]" value="<?= h($_POST['received_time'][$index] ?? '') ?>">
                                     <?php else: ?>
-                                        <?= h(fmt_asset_value(
-                                            $line['amount'],
-                                            (string)($line['currency_symbol'] ?? ''),
-                                            (int)($line['display_decimals'] ?? 8),
-                                            (int)($line['is_fiat'] ?? 0)
-                                        )) ?>
-                                        <input type="hidden" name="amount[]" value="<?= h((string)$line['amount']) ?>">
+                                        <input type="hidden" name="received_time[]" value="">
+                                    <?php endif; ?>
+                                </td>
+
+                                <td>
+                                    <?php if ((int)$line['show_value_at_receipt'] === 1): ?>
+                                        <div style="display:flex; gap:8px; align-items:center;">
+                                            <input
+                                                type="text"
+                                                name="value_at_receipt[]"
+                                                value="<?= h($_POST['value_at_receipt'][$index] ?? '') ?>"
+                                                placeholder="0.00"
+                                            >
+                                            <?php if ($price_lookup_enabled): ?>
+                                                <button type="button" class="btn btn-secondary js-template-price-lookup" data-row-index="<?= (int)$index ?>">Lookup</button>
+                                            <?php endif; ?>
+                                        </div>
+                                        <div class="subtext js-template-price-status" data-row-index="<?= (int)$index ?>" style="margin-top:6px;"></div>
+                                    <?php else: ?>
+                                        <input type="hidden" name="value_at_receipt[]" value="">
                                     <?php endif; ?>
                                 </td>
 
@@ -494,3 +551,62 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         </form>
     <?php endif; ?>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('.js-template-price-lookup').forEach(function (button) {
+        button.addEventListener('click', async function () {
+            const row = button.closest('tr');
+            const rowIndex = button.getAttribute('data-row-index');
+            const statusEl = document.querySelector('.js-template-price-status[data-row-index="' + rowIndex + '"]');
+            const amountEl = row.querySelector('input[name="amount[]"]');
+            const assetEl = row.querySelector('select[name="asset_id[]"], input[name="asset_id[]"]');
+            const timeEl = row.querySelector('input[name="received_time[]"]');
+            const valueEl = row.querySelector('input[name="value_at_receipt[]"]');
+            const dateEl = document.getElementById('batch_date');
+
+            if (!statusEl || !amountEl || !assetEl || !timeEl || !valueEl || !dateEl) {
+                return;
+            }
+
+            const payload = {
+                asset_id: assetEl.value,
+                amount: amountEl.value,
+                date: dateEl.value,
+                time: timeEl.value
+            };
+
+            if (!payload.asset_id || payload.asset_id === '0' || !payload.amount || !payload.date || !payload.time) {
+                statusEl.textContent = 'Enter asset, amount, date, and time first.';
+                statusEl.style.color = '#d9534f';
+                return;
+            }
+
+            statusEl.textContent = 'Looking up price...';
+            statusEl.style.color = '';
+
+            try {
+                const response = await fetch('ajax/get_price.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+
+                if (!response.ok || !data.success) {
+                    statusEl.textContent = data.error || 'Price lookup failed.';
+                    statusEl.style.color = '#d9534f';
+                    return;
+                }
+
+                valueEl.value = data.total_value_formatted || data.total_value || '';
+                statusEl.textContent = data.message || ('Loaded ' + (data.currency_symbol || '$') + (data.unit_price_formatted || data.unit_price) + ' per unit.');
+                statusEl.style.color = '';
+            } catch (error) {
+                statusEl.textContent = 'Price lookup failed.';
+                statusEl.style.color = '#d9534f';
+            }
+        });
+    });
+});
+</script>

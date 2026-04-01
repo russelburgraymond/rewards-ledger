@@ -20,6 +20,26 @@ if (isset($_GET['deleted'])) {
     $success = "Quick Entry item deleted successfully.";
 }
 
+
+if (isset($_GET['valuation_saved'])) {
+    $success = "Valuation tool settings updated successfully.";
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_valuation_tools') {
+    $enable_price_lookup = isset($_POST['enable_price_lookup']) ? '1' : '0';
+    $coingecko_demo_api_key = trim((string)($_POST['coingecko_demo_api_key'] ?? ''));
+
+    $ok = set_setting($conn, 'enable_price_lookup', $enable_price_lookup);
+    $ok = set_setting($conn, 'coingecko_demo_api_key', $coingecko_demo_api_key) && $ok;
+
+    if ($ok) {
+        header("Location: index.php?page=settings&tab=quick_adds&valuation_saved=1");
+        exit;
+    }
+
+    $error = "Could not save valuation tool settings.";
+}
+
 /* -----------------------------
    HANDLE DELETE
 ----------------------------- */
@@ -104,6 +124,9 @@ $res = $conn->query("
 ");
 if ($res) while ($row = $res->fetch_assoc()) $referrals[] = $row;
 
+$enable_price_lookup = get_setting($conn, 'enable_price_lookup', '1') === '1';
+$coingecko_demo_api_key = get_setting($conn, 'coingecko_demo_api_key', '');
+
 /* -----------------------------
    HANDLE SAVE
 ----------------------------- */
@@ -129,6 +152,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     $show_referral = isset($_POST['show_referral']) ? 1 : 0;
     $show_amount = isset($_POST['show_amount']) ? 1 : 0;
     $show_notes = isset($_POST['show_notes']) ? 1 : 0;
+    $show_received_time = isset($_POST['show_received_time']) ? 1 : 0;
+    $show_value_at_receipt = isset($_POST['show_value_at_receipt']) ? 1 : 0;
     $show_from_account = isset($_POST['show_from_account']) ? 1 : 0;
     $show_to_account = isset($_POST['show_to_account']) ? 1 : 0;
 
@@ -198,6 +223,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                             show_referral = ?,
                             show_amount = ?,
                             show_notes = ?,
+                            show_received_time = ?,
+                            show_value_at_receipt = ?,
                             show_from_account = ?,
                             show_to_account = ?,
                             is_multi_add = ?,
@@ -208,7 +235,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
                     if ($stmt) {
                         $stmt->bind_param(
-                            "isiiiiiidsiiiiiiiiiiii",
+                            "isiiiiiidsiiiiiiiiiiiiii",
                             $app_id,
                             $quick_add_name,
                             $miner_id,
@@ -225,6 +252,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                             $show_referral,
                             $show_amount,
                             $show_notes,
+                            $show_received_time,
+                            $show_value_at_receipt,
                             $show_from_account,
                             $show_to_account,
                             $is_multi_add,
@@ -259,18 +288,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                             show_referral,
                             show_amount,
                             show_notes,
+                            show_received_time,
+                            show_value_at_receipt,
                             show_from_account,
                             show_to_account,
                             is_multi_add,
                             sort_order,
                             is_active
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ");
 
                     if ($stmt) {
                         $stmt->bind_param(
-                            "isiiiiiidsiiiiiiiiiii",
+                            "isiiiiiidsiiiiiiiiiiiii",
                             $app_id,
                             $quick_add_name,
                             $miner_id,
@@ -287,6 +318,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                             $show_referral,
                             $show_amount,
                             $show_notes,
+                            $show_received_time,
+                            $show_value_at_receipt,
                             $show_from_account,
                             $show_to_account,
                             $is_multi_add,
@@ -328,6 +361,8 @@ $edit = [
     'show_referral' => 0,
     'show_amount' => 1,
     'show_notes' => 1,
+    'show_received_time' => 1,
+    'show_value_at_receipt' => 1,
     'show_from_account' => 0,
     'show_to_account' => 0,
     'is_multi_add' => 0,
@@ -358,6 +393,8 @@ if (isset($_GET['edit'])) {
                 show_referral,
                 show_amount,
                 show_notes,
+                show_received_time,
+                show_value_at_receipt,
                 show_from_account,
                 show_to_account,
                 is_multi_add,
@@ -402,6 +439,8 @@ $res = $conn->query("
         qa.show_referral,
         qa.show_amount,
         qa.show_notes,
+        qa.show_received_time,
+        qa.show_value_at_receipt,
         qa.show_from_account,
         qa.show_to_account,
         ap.app_name,
@@ -421,6 +460,35 @@ if ($res) {
 } else {
     $error = "Could not load Quick Entry items: " . $conn->error;
 }
+
+$template_items = [];
+$res_templates = $conn->query("
+    SELECT
+        t.id,
+        t.template_name,
+        t.app_id,
+        t.sort_order,
+        a.app_name,
+        COUNT(ti.id) AS line_count
+    FROM templates t
+    LEFT JOIN apps a ON a.id = t.app_id
+    LEFT JOIN template_items ti ON ti.template_id = t.id
+    GROUP BY t.id, t.template_name, t.app_id, t.sort_order, a.app_name
+    ORDER BY t.sort_order ASC, a.app_name ASC, t.template_name ASC, t.id ASC
+");
+
+if ($res_templates) {
+    while ($row = $res_templates->fetch_assoc()) {
+        $template_items[] = $row;
+    }
+} else {
+    if ($error !== '') {
+        $error .= " | ";
+    }
+    $error .= "Could not load templates: " . $conn->error;
+}
+
+$show_quick_add_form = ((int)$edit['id'] > 0) || (($_GET['action'] ?? '') === 'create_quick_add');
 ?>
 
 <div class="page-head">
@@ -438,155 +506,229 @@ if ($res) {
 
 <div class="grid-2">
     <div class="card">
-        <h3><?= (int)$edit['id'] > 0 ? 'Edit Quick Entry Item' : 'Add Quick Entry Item' ?></h3>
+        <?php if ($show_quick_add_form): ?>
+            <h3><?= (int)$edit['id'] > 0 ? 'Edit Quick Entry Item' : 'Add Quick Entry Item' ?></h3>
 
-        <form method="post">
-            <input type="hidden" name="action" value="save_quick_add">
-            <input type="hidden" name="id" value="<?= (int)$edit['id'] ?>">
+            <form method="post">
+                <input type="hidden" name="action" value="save_quick_add">
+                <input type="hidden" name="id" value="<?= (int)$edit['id'] ?>">
 
-            <div class="form-row">
-                <label for="app_id">App</label>
-                <select id="app_id" name="app_id" required>
-                    <option value="0">Select App</option>
-                    <?php foreach ($apps as $app): ?>
-                        <option value="<?= (int)$app['id'] ?>" <?= (int)$edit['app_id'] === (int)$app['id'] ? 'selected' : '' ?>>
-                            <?= h($app['app_name']) ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-
-            <div class="form-row">
-                <label for="quick_add_name">Quick Entry Name</label>
-                <input type="text" id="quick_add_name" name="quick_add_name" value="<?= h($edit['quick_add_name']) ?>" maxlength="150" required>
-            </div>
-
-            <div class="form-row">
-                <label for="miner_id">Miner</label>
-                <select id="miner_id" name="miner_id">
-                    <option value="0">None</option>
-                    <?php foreach ($miners as $m): ?>
-                        <option value="<?= (int)$m['id'] ?>" <?= (int)$edit['miner_id'] === (int)$m['id'] ? 'selected' : '' ?>>
-                            <?= h($m['miner_name']) ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-
-            <div class="form-row">
-                <label for="asset_id">Asset</label>
-                <select id="asset_id" name="asset_id">
-                    <option value="0">None</option>
-                    <?php foreach ($assets as $a): ?>
-                        <option value="<?= (int)$a['id'] ?>" <?= (int)$edit['asset_id'] === (int)$a['id'] ? 'selected' : '' ?>>
-                            <?= h($a['asset_name']) ?><?php if (!empty($a['asset_symbol'])): ?> (<?= h($a['asset_symbol']) ?>)<?php endif; ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-
-            <div class="form-row">
-                <label for="category_id">Category</label>
-                <select id="category_id" name="category_id">
-                    <option value="0">None</option>
-                    <?php foreach ($categories as $c): ?>
-                        <option value="<?= (int)$c['id'] ?>" data-app-id="<?= (int)$c['app_id'] ?>" <?= (int)$edit['category_id'] === (int)$c['id'] ? 'selected' : '' ?>>
-                            <?= h($c['category_name']) ?><?php if (!empty($c['behavior_type'])): ?> (<?= h($c['behavior_type']) ?>)<?php endif; ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-
-            <div class="form-row">
-                <label for="referral_id">Referral</label>
-                <select id="referral_id" name="referral_id">
-                    <option value="0">None</option>
-                    <?php foreach ($referrals as $r): ?>
-                        <option value="<?= (int)$r['id'] ?>" <?= (int)$edit['referral_id'] === (int)$r['id'] ? 'selected' : '' ?>>
-                            <?= h($r['referral_name']) ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-
-            <div class="form-row">
-                <label for="from_account_id">From Account</label>
-                <select id="from_account_id" name="from_account_id">
-                    <option value="0">None</option>
-                    <?php foreach ($accounts as $a): ?>
-                        <option value="<?= (int)$a['id'] ?>" <?= (int)$edit['from_account_id'] === (int)$a['id'] ? 'selected' : '' ?>>
-                            <?= h($a['account_name']) ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-
-            <div class="form-row">
-                <label for="to_account_id">To Account</label>
-                <select id="to_account_id" name="to_account_id">
-                    <option value="0">None</option>
-                    <?php foreach ($accounts as $a): ?>
-                        <option value="<?= (int)$a['id'] ?>" <?= (int)$edit['to_account_id'] === (int)$a['id'] ? 'selected' : '' ?>>
-                            <?= h($a['account_name']) ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-
-            <div class="form-row">
-                <label for="amount">
-                    Amount
-                    <span style="margin-left:12px; font-weight:normal;">
-                        <input type="checkbox" name="is_multi_add" value="1" <?= !empty($edit['is_multi_add']) ? 'checked' : '' ?>>
-                        Allow multiple inputs
-                    </span>
-                </label>
-                <input type="text" id="amount" name="amount" value="<?= h((string)$edit['amount']) ?>">
-            </div>
-
-            <div class="form-row">
-                <label for="notes">Notes</label>
-                <textarea id="notes" name="notes" rows="3"><?= h($edit['notes']) ?></textarea>
-            </div>
-
-            <div class="form-row">
-                <label>Show This Field</label>
-                <div>
-                    <label><input type="checkbox" name="show_miner" <?= !empty($edit['show_miner']) ? 'checked' : '' ?>> Miner</label><br>
-                    <label><input type="checkbox" name="show_asset" <?= !empty($edit['show_asset']) ? 'checked' : '' ?>> Asset</label><br>
-                    <label><input type="checkbox" name="show_category" <?= !empty($edit['show_category']) ? 'checked' : '' ?>> Category</label><br>
-                    <label><input type="checkbox" name="show_referral" <?= !empty($edit['show_referral']) ? 'checked' : '' ?>> Referral</label><br>
-                    <label><input type="checkbox" name="show_amount" <?= !empty($edit['show_amount']) ? 'checked' : '' ?>> Amount</label><br>
-                    <label><input type="checkbox" name="show_notes" <?= !empty($edit['show_notes']) ? 'checked' : '' ?>> Notes</label><br>
-                    <label><input type="checkbox" name="show_from_account" <?= !empty($edit['show_from_account']) ? 'checked' : '' ?>> From Account</label><br>
-                    <label><input type="checkbox" name="show_to_account" <?= !empty($edit['show_to_account']) ? 'checked' : '' ?>> To Account</label>
+                <div class="form-row">
+                    <label for="app_id">App</label>
+                    <select id="app_id" name="app_id" required>
+                        <option value="0">Select App</option>
+                        <?php foreach ($apps as $app): ?>
+                            <option value="<?= (int)$app['id'] ?>" <?= (int)$edit['app_id'] === (int)$app['id'] ? 'selected' : '' ?>>
+                                <?= h($app['app_name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
                 </div>
+
+                <div class="form-row">
+                    <label for="quick_add_name">Quick Entry Name</label>
+                    <input type="text" id="quick_add_name" name="quick_add_name" value="<?= h($edit['quick_add_name']) ?>" maxlength="150" required>
+                </div>
+
+                <div class="form-row">
+                    <label for="miner_id">Miner</label>
+                    <select id="miner_id" name="miner_id">
+                        <option value="0">None</option>
+                        <?php foreach ($miners as $m): ?>
+                            <option value="<?= (int)$m['id'] ?>" <?= (int)$edit['miner_id'] === (int)$m['id'] ? 'selected' : '' ?>>
+                                <?= h($m['miner_name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="form-row">
+                    <label for="asset_id">Asset</label>
+                    <select id="asset_id" name="asset_id">
+                        <option value="0">None</option>
+                        <?php foreach ($assets as $a): ?>
+                            <option value="<?= (int)$a['id'] ?>" <?= (int)$edit['asset_id'] === (int)$a['id'] ? 'selected' : '' ?>>
+                                <?= h($a['asset_name']) ?><?php if (!empty($a['asset_symbol'])): ?> (<?= h($a['asset_symbol']) ?>)<?php endif; ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="form-row">
+                    <label for="category_id">Category</label>
+                    <select id="category_id" name="category_id">
+                        <option value="0">None</option>
+                        <?php foreach ($categories as $c): ?>
+                            <option value="<?= (int)$c['id'] ?>" data-app-id="<?= (int)$c['app_id'] ?>" <?= (int)$edit['category_id'] === (int)$c['id'] ? 'selected' : '' ?>>
+                                <?= h($c['category_name']) ?><?php if (!empty($c['behavior_type'])): ?> (<?= h($c['behavior_type']) ?>)<?php endif; ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="form-row">
+                    <label for="referral_id">Referral</label>
+                    <select id="referral_id" name="referral_id">
+                        <option value="0">None</option>
+                        <?php foreach ($referrals as $r): ?>
+                            <option value="<?= (int)$r['id'] ?>" <?= (int)$edit['referral_id'] === (int)$r['id'] ? 'selected' : '' ?>>
+                                <?= h($r['referral_name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="form-row">
+                    <label for="from_account_id">From Account</label>
+                    <select id="from_account_id" name="from_account_id">
+                        <option value="0">None</option>
+                        <?php foreach ($accounts as $a): ?>
+                            <option value="<?= (int)$a['id'] ?>" <?= (int)$edit['from_account_id'] === (int)$a['id'] ? 'selected' : '' ?>>
+                                <?= h($a['account_name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="form-row">
+                    <label for="to_account_id">To Account</label>
+                    <select id="to_account_id" name="to_account_id">
+                        <option value="0">None</option>
+                        <?php foreach ($accounts as $a): ?>
+                            <option value="<?= (int)$a['id'] ?>" <?= (int)$edit['to_account_id'] === (int)$a['id'] ? 'selected' : '' ?>>
+                                <?= h($a['account_name']) ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+
+                <div class="form-row">
+                    <label for="amount">
+                        Amount
+                        <span style="margin-left:12px; font-weight:normal;">
+                            <input type="checkbox" name="is_multi_add" value="1" <?= !empty($edit['is_multi_add']) ? 'checked' : '' ?>>
+                            Allow multiple inputs
+                        </span>
+                    </label>
+                    <input type="text" id="amount" name="amount" value="<?= h((string)$edit['amount']) ?>">
+                </div>
+
+                <div class="form-row">
+                    <label for="notes">Notes</label>
+                    <textarea id="notes" name="notes" rows="3"><?= h($edit['notes']) ?></textarea>
+                </div>
+
+                <div class="form-row">
+                    <label>Show This Field</label>
+                    <div>
+                        <label><input type="checkbox" name="show_miner" <?= !empty($edit['show_miner']) ? 'checked' : '' ?>> Miner</label><br>
+                        <label><input type="checkbox" name="show_asset" <?= !empty($edit['show_asset']) ? 'checked' : '' ?>> Asset</label><br>
+                        <label><input type="checkbox" name="show_category" <?= !empty($edit['show_category']) ? 'checked' : '' ?>> Category</label><br>
+                        <label><input type="checkbox" name="show_referral" <?= !empty($edit['show_referral']) ? 'checked' : '' ?>> Referral</label><br>
+                        <label><input type="checkbox" name="show_amount" <?= !empty($edit['show_amount']) ? 'checked' : '' ?>> Amount</label><br>
+                        <label><input type="checkbox" name="show_notes" <?= !empty($edit['show_notes']) ? 'checked' : '' ?>> Notes</label><br>
+                        <label><input type="checkbox" name="show_received_time" <?= !empty($edit['show_received_time']) ? 'checked' : '' ?>> Time Received</label><br>
+                        <label><input type="checkbox" name="show_value_at_receipt" <?= !empty($edit['show_value_at_receipt']) ? 'checked' : '' ?>> Value at Receipt</label><br>
+                        <label><input type="checkbox" name="show_from_account" <?= !empty($edit['show_from_account']) ? 'checked' : '' ?>> From Account</label><br>
+                        <label><input type="checkbox" name="show_to_account" <?= !empty($edit['show_to_account']) ? 'checked' : '' ?>> To Account</label>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <label for="sort_order">Sort Order</label>
+                    <input type="number" id="sort_order" name="sort_order" value="<?= (int)$edit['sort_order'] ?>">
+                </div>
+
+                <div class="form-row">
+                    <label>
+                        <input type="checkbox" name="is_active" <?= !empty($edit['is_active']) ? 'checked' : '' ?>>
+                        Active
+                    </label>
+                </div>
+
+                <button type="submit" class="btn btn-primary">
+                    <?= (int)$edit['id'] > 0 ? 'Save Quick Entry Item' : 'Add Quick Entry Item' ?>
+                </button>
+
+                <a class="btn btn-secondary" href="index.php?page=settings&tab=quick_adds">Cancel</a>
+            </form>
+        <?php else: ?>
+            <h3>Templates</h3>
+            <p class="subtext">Create new items from here, or edit existing ones in the list on the right.</p>
+
+            <p style="margin:0 0 10px 0;">
+                <a class="btn btn-primary" href="index.php?page=template_edit&from=settings_templates">+ Add New Template</a>
+            </p>
+
+            <p style="margin:0 0 18px 0;">
+                <a class="btn btn-secondary" href="index.php?page=settings&tab=quick_adds&action=create_quick_add">+ Add New Quick Add Item</a>
+            </p>
+
+            <div class="card" style="margin-top:16px; padding:16px;">
+                <h3 style="margin-top:0;">Valuation Tools</h3>
+
+                <form method="post">
+                    <input type="hidden" name="action" value="save_valuation_tools">
+
+                    <label style="display:block; margin-bottom:10px;">
+                        <input type="checkbox" name="enable_price_lookup" <?= $enable_price_lookup ? 'checked' : '' ?>>
+                        Enable manual price lookup buttons on Quick Entry and Template Use forms
+                    </label>
+
+                    <div class="form-row" style="margin-top:12px;">
+                        <label for="coingecko_demo_api_key">CoinGecko Demo API Key (optional)</label>
+                        <input type="text" id="coingecko_demo_api_key" name="coingecko_demo_api_key" value="<?= h($coingecko_demo_api_key) ?>" placeholder="Leave blank to try public access">
+                        <div class="subtext" style="margin-top:6px;">Optional. If you add a Demo API key here, the lookup button will send it from your server.</div>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Save Valuation Tools</button>
+                </form>
             </div>
-
-            <div class="form-row">
-                <label for="sort_order">Sort Order</label>
-                <input type="number" id="sort_order" name="sort_order" value="<?= (int)$edit['sort_order'] ?>">
-            </div>
-
-            <div class="form-row">
-                <label>
-                    <input type="checkbox" name="is_active" <?= !empty($edit['is_active']) ? 'checked' : '' ?>>
-                    Active
-                </label>
-            </div>
-
-            <button type="submit" class="btn btn-primary">
-                <?= (int)$edit['id'] > 0 ? 'Save Quick Entry Item' : 'Add Quick Entry Item' ?>
-            </button>
-
-            <?php if ((int)$edit['id'] > 0): ?>
-                <a class="btn btn-secondary" href="index.php?page=settings&tab=quick_adds">Cancel Edit</a>
-            <?php endif; ?>
-        </form>
+        <?php endif; ?>
     </div>
 
     <div class="card">
-        <h3>Quick Entry List</h3>
+        <h3>Template Items</h3>
+        <p class="subtext">Edit or delete templates here. Quick Entry items are listed below.</p>
+
+        <?php if (!$template_items): ?>
+            <p class="subtext">No templates found.</p>
+        <?php else: ?>
+            <div class="table-wrap" style="margin-bottom:18px;">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th style="width:40px;"></th>
+                            <th>App</th>
+                            <th>Name</th>
+                            <th style="width:80px;">Lines</th>
+                            <th style="width:80px;">Sort</th>
+                            <th style="width:90px;">Edit</th>
+                            <th style="width:90px;">Delete</th>
+                        </tr>
+                    </thead>
+                    <tbody id="template-sortable">
+                        <?php foreach ($template_items as $tpl): ?>
+                            <tr data-id="<?= (int)$tpl['id'] ?>">
+                                <td class="drag-handle">☰</td>
+                                <td><?= h($tpl['app_name'] ?? '') ?></td>
+                                <td><?= h($tpl['template_name'] ?: 'Untitled') ?></td>
+                                <td><span class="badge badge-blue"><?= (int)$tpl['line_count'] ?></span></td>
+                                <td class="sort-order"><?= (int)$tpl['sort_order'] ?></td>
+                                <td>
+                                    <a class="table-link" href="index.php?page=template_edit&id=<?= (int)$tpl['id'] ?>&from=settings_templates">Edit</a>
+                                </td>
+                                <td>
+                                    <a class="table-link" href="index.php?page=template_delete&id=<?= (int)$tpl['id'] ?>&from=settings_templates" onclick="return confirm('Delete this template and its template lines?');">Delete</a>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
+
+        <h3 style="margin-top:4px;">Quick Entry Items</h3>
         <p class="subtext">Drag rows to control Quick Entry dropdown order.</p>
 
         <?php if (!$quick_adds): ?>
@@ -605,7 +747,7 @@ if ($res) {
                             <th style="width:80px;">Sort</th>
                             <th style="width:100px;">Status</th>
                             <th style="width:90px;">Edit</th>
-							<th style="width:90px;">Delete</th>
+                            <th style="width:90px;">Delete</th>
                         </tr>
                     </thead>
                     <tbody id="quick-add-sortable">
@@ -632,15 +774,11 @@ if ($res) {
                                     <?php endif; ?>
                                 </td>
                                 <td>
-									<a class="table-link" href="index.php?page=settings&tab=quick_adds&edit=<?= (int)$qa['id'] ?>">Edit</a>
-								</td>
-								<td>
-									<a class="table-link"
-									   href="index.php?page=settings&tab=quick_adds&delete=<?= (int)$qa['id'] ?>"
-									   onclick="return confirm('Delete this Quick Entry item?');">
-									   Delete
-									</a>
-								</td>
+                                    <a class="table-link" href="index.php?page=settings&tab=quick_adds&edit=<?= (int)$qa['id'] ?>">Edit</a>
+                                </td>
+                                <td>
+                                    <a class="table-link" href="index.php?page=settings&tab=quick_adds&delete=<?= (int)$qa['id'] ?>" onclick="return confirm('Delete this Quick Entry item?');">Delete</a>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -681,6 +819,39 @@ document.addEventListener("DOMContentLoaded", function () {
         filterCategoriesByApp();
     }
 
+    const templateEl = document.getElementById('template-sortable');
+    if (templateEl && typeof Sortable !== 'undefined') {
+        new Sortable(templateEl, {
+            handle: '.drag-handle',
+            animation: 150,
+            ghostClass: 'sortable-ghost',
+            onEnd: function () {
+                const rows = templateEl.querySelectorAll('tr');
+                const order = [];
+
+                rows.forEach((row, index) => {
+                    order.push({
+                        id: row.dataset.id,
+                        sort_order: index + 1
+                    });
+
+                    const sortCell = row.querySelector('.sort-order');
+                    if (sortCell) {
+                        sortCell.textContent = index + 1;
+                    }
+                });
+
+                fetch('templates_reorder.php', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(order)
+                });
+            }
+        });
+    }
+
     const el = document.getElementById('quick-add-sortable');
     if (!el || typeof Sortable === 'undefined') return;
 
@@ -695,8 +866,13 @@ document.addEventListener("DOMContentLoaded", function () {
             rows.forEach((row, index) => {
                 order.push({
                     id: row.dataset.id,
-                    sort_order: index
+                    sort_order: index + 1
                 });
+
+                const sortCell = row.querySelector('.sort-order');
+                if (sortCell) {
+                    sortCell.textContent = index + 1;
+                }
             });
 
             fetch('quick_adds_reorder.php', {

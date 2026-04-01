@@ -4,6 +4,13 @@ All notable changes to this application are documented here.
 
 ---
 
+## 🚀 v2.0.1
+
+### 🛠 Improvements
+* 0.000000 in "Amount" in Quick Entry page now disappears when clicked.
+* 0.000000 in "Amount" in Templates Use page now disappears when clicked.
+* Finished Wiki.
+
 ## 🚀 v2.0.0
 
 ### ✨ Major Features
@@ -86,3 +93,12 @@ All notable changes to this application are documented here.
 ### ✨ Features
 
 * First internal test release
+----------------------------------------
+v2.0.2
+----------------------------------------
+
+- Add Neutral behavior type for categories
+- Set Daily Gross Rewards default behavior to Neutral
+- Ignore Neutral and Transfer categories in ledger total calculations
+- Style Investment dashboard cards in blue and Neutral cards in gray
+

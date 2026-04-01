@@ -31,72 +31,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($app_name === '') {
             $error = "App name is required.";
         } else {
-            // duplicate check
-            if ($id > 0) {
-                $stmtDup = $conn->prepare("
-                    SELECT id
-                    FROM apps
-                    WHERE app_name = ?
-                      AND id <> ?
-                    LIMIT 1
-                ");
-                $stmtDup->bind_param("si", $app_name, $id);
+            $duplicate_id = rl_find_duplicate_id($conn, 'apps', 'app_name', $app_name, $id);
+
+            if ($duplicate_id > 0) {
+                $error = "An app with that name already exists.";
             } else {
-                $stmtDup = $conn->prepare("
-                    SELECT id
-                    FROM apps
-                    WHERE app_name = ?
-                    LIMIT 1
-                ");
-                $stmtDup->bind_param("s", $app_name);
-            }
+                if ($id > 0) {
+                    $stmt = $conn->prepare("
+                        UPDATE apps
+                        SET app_name = ?, sort_order = ?, is_active = ?
+                        WHERE id = ?
+                    ");
 
-            if ($stmtDup) {
-                $stmtDup->execute();
-                $dupRes = $stmtDup->get_result();
-                $duplicate = $dupRes ? $dupRes->fetch_assoc() : null;
-                $stmtDup->close();
+                    if ($stmt) {
+                        $stmt->bind_param("siii", $app_name, $sort_order, $is_active, $id);
+                        $stmt->execute();
+                        $stmt->close();
 
-                if ($duplicate) {
-                    $error = "An app with that name already exists.";
-                } else {
-                    if ($id > 0) {
-                        $stmt = $conn->prepare("
-                            UPDATE apps
-                            SET app_name = ?, sort_order = ?, is_active = ?
-                            WHERE id = ?
-                        ");
-
-                        if ($stmt) {
-                            $stmt->bind_param("siii", $app_name, $sort_order, $is_active, $id);
-                            $stmt->execute();
-                            $stmt->close();
-
-                            header("Location: index.php?page=settings&tab=apps&updated=1");
-                            exit;
-                        } else {
-                            $error = "Could not update app: " . $conn->error;
-                        }
+                        header("Location: index.php?page=settings&tab=apps&updated=1");
+                        exit;
                     } else {
-                        $stmt = $conn->prepare("
-                            INSERT INTO apps (app_name, sort_order, is_active)
-                            VALUES (?, ?, ?)
-                        ");
+                        $error = "Could not update app: " . $conn->error;
+                    }
+                } else {
+                    // ======================================================
+                    // [SETTINGS] APPS NEXT SORT ORDER ON ADD
+                    // ======================================================
+                    // New apps should be added to the end of the current list
+                    // so multiple new rows do not all start at sort order 0.
+                    $next_sort_order = 1;
+                    $next_sort_result = $conn->query("SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_sort_order FROM apps");
 
-                        if ($stmt) {
-                            $stmt->bind_param("sii", $app_name, $sort_order, $is_active);
-                            $stmt->execute();
-                            $stmt->close();
+                    if ($next_sort_result) {
+                        $next_sort_row = $next_sort_result->fetch_assoc();
+                        $next_sort_order = (int)($next_sort_row['next_sort_order'] ?? 1);
+                        $next_sort_result->close();
+                    }
 
-                            header("Location: index.php?page=settings&tab=apps&added=1");
-                            exit;
-                        } else {
-                            $error = "Could not add app: " . $conn->error;
-                        }
+                    $stmt = $conn->prepare("
+                        INSERT INTO apps (app_name, sort_order, is_active)
+                        VALUES (?, ?, ?)
+                    ");
+
+                    if ($stmt) {
+                        $stmt->bind_param("sii", $app_name, $next_sort_order, $is_active);
+                        $stmt->execute();
+                        $stmt->close();
+
+                        header("Location: index.php?page=settings&tab=apps&added=1");
+                        exit;
+                    } else {
+                        $error = "Could not add app: " . $conn->error;
                     }
                 }
-            } else {
-                $error = "Could not validate app name: " . $conn->error;
             }
         }
     }
@@ -105,10 +92,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 /* -----------------------------
    LOAD EDIT RECORD
 ----------------------------- */
+// ======================================================
+// [SETTINGS] DEFAULT APP EDIT STATE
+// ======================================================
+// Default new apps to the end of the current list so the sort
+// order field matches where the new row will actually be saved.
+$next_app_sort_order = 1;
+$next_app_sort_result = $conn->query("SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_sort_order FROM apps");
+
+if ($next_app_sort_result) {
+    $next_app_sort_row = $next_app_sort_result->fetch_assoc();
+    $next_app_sort_order = (int)($next_app_sort_row['next_sort_order'] ?? 1);
+    $next_app_sort_result->close();
+}
+
 $edit = [
     'id' => 0,
     'app_name' => '',
-    'sort_order' => 0,
+    'sort_order' => $next_app_sort_order,
     'is_active' => 1,
 ];
 
@@ -220,7 +221,7 @@ if ($result) {
 
     <div class="card">
         <h3>App List</h3>
-        <p class="subtext">Activation is controlled from the edit form. Sort Order controls list order.</p>
+        <p class="subtext">Activation is controlled from the edit form. Drag and drop rows to reorder apps quickly.</p>
 
         <?php if (!$apps): ?>
             <p class="subtext">No apps saved yet.</p>
@@ -229,17 +230,19 @@ if ($result) {
                 <table class="data-table">
                     <thead>
                         <tr>
+                            <th style="width:40px;"></th>
                             <th>Name</th>
                             <th style="width:100px;">Sort</th>
                             <th style="width:100px;">Status</th>
                             <th style="width:90px;">Edit</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="app-sortable">
                         <?php foreach ($apps as $a): ?>
-                            <tr>
+                            <tr data-id="<?= (int)$a['id'] ?>">
+                                <td class="drag-handle">☰</td>
                                 <td><?= h($a['app_name']) ?></td>
-                                <td><?= (int)$a['sort_order'] ?></td>
+                                <td class="app-sort-order"><?= (int)$a['sort_order'] ?></td>
                                 <td>
                                     <?php if ((int)$a['is_active'] === 1): ?>
                                         <span class="badge badge-green">Active</span>
@@ -258,3 +261,42 @@ if ($result) {
         <?php endif; ?>
     </div>
 </div>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const el = document.getElementById('app-sortable');
+
+    if (!el || typeof Sortable === 'undefined') return;
+
+    new Sortable(el, {
+        handle: '.drag-handle',
+        animation: 150,
+        ghostClass: 'sortable-ghost',
+        onEnd: function () {
+            const rows = el.querySelectorAll('tr');
+            const order = [];
+
+            rows.forEach((row, index) => {
+                const sortCell = row.querySelector('.app-sort-order');
+                const sortOrder = index + 1;
+
+                if (sortCell) {
+                    sortCell.textContent = sortOrder;
+                }
+
+                order.push({
+                    id: row.dataset.id,
+                    sort_order: sortOrder
+                });
+            });
+
+            fetch('apps_reorder.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(order)
+            });
+        }
+    });
+});
+</script>

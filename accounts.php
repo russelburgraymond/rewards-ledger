@@ -3,9 +3,9 @@
 $error = "";
 $success = "";
 
-/* -----------------------------
-   HANDLE SAVE
------------------------------ */
+// ======================================================
+// [SETTINGS] HANDLE ACCOUNT SAVE
+// ======================================================
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $id = (int)($_POST['id'] ?? 0);
     $account_name = trim($_POST['account_name'] ?? '');
@@ -17,7 +17,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($account_name === '') {
         $error = "Account name is required.";
     } else {
-        if ($id > 0) {
+        $duplicate_id = rl_find_duplicate_id($conn, 'accounts', 'account_name', $account_name, $id);
+
+        if ($duplicate_id > 0) {
+            $error = "An account with that name already exists.";
+        } elseif ($id > 0) {
             $stmt = $conn->prepare("
                 UPDATE accounts
                 SET account_name = ?, account_type = ?, account_identifier = ?, notes = ?, is_active = ?
@@ -29,11 +33,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $success = "Account updated.";
         } else {
+            // New accounts are added to the end of the current sort order list
+            $next_sort_order = 1;
+            $next_sort_result = $conn->query("SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_sort_order FROM accounts");
+            if ($next_sort_result && ($next_sort_row = $next_sort_result->fetch_assoc())) {
+                $next_sort_order = (int)($next_sort_row['next_sort_order'] ?? 1);
+            }
+
             $stmt = $conn->prepare("
-                INSERT INTO accounts (account_name, account_type, account_identifier, notes, is_active)
-                VALUES (?, ?, ?, ?, ?)
+                INSERT INTO accounts (account_name, account_type, account_identifier, notes, is_active, sort_order)
+                VALUES (?, ?, ?, ?, ?, ?)
             ");
-            $stmt->bind_param("ssssi", $account_name, $account_type, $account_identifier, $notes, $is_active);
+            $stmt->bind_param("ssssii", $account_name, $account_type, $account_identifier, $notes, $is_active, $next_sort_order);
             $stmt->execute();
             $stmt->close();
 
@@ -42,9 +53,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-/* -----------------------------
-   LOAD EDIT RECORD
------------------------------ */
+// ======================================================
+// [SETTINGS] LOAD EDIT RECORD
+// ======================================================
 $edit = [
     'id' => 0,
     'account_name' => '',
@@ -75,14 +86,14 @@ if (isset($_GET['edit'])) {
     }
 }
 
-/* -----------------------------
-   LOAD LIST
------------------------------ */
+// ======================================================
+// [SETTINGS] LOAD ACCOUNT LIST
+// ======================================================
 $accounts = [];
 $result = $conn->query("
-    SELECT id, account_name, account_type, account_identifier, notes, is_active
+    SELECT id, account_name, account_type, account_identifier, notes, is_active, sort_order
     FROM accounts
-    ORDER BY is_active DESC, account_name ASC, id ASC
+    ORDER BY sort_order ASC, id ASC
 ");
 
 if ($result) {
@@ -168,6 +179,7 @@ if ($result) {
 
     <div class="card">
         <h3>Accounts List</h3>
+        <p class="subtext">Drag and drop rows to reorder accounts. New accounts are added to the end of the list automatically.</p>
 
         <?php if (!$accounts): ?>
             <p class="subtext">No accounts saved yet.</p>
@@ -176,21 +188,25 @@ if ($result) {
                 <table class="data-table">
                     <thead>
                         <tr>
+                            <th style="width:40px;"></th>
                             <th style="width:70px;">ID</th>
                             <th>Name</th>
                             <th style="width:140px;">Type</th>
                             <th>Identifier</th>
+                            <th style="width:80px;">Sort</th>
                             <th style="width:100px;">Status</th>
                             <th style="width:90px;">Edit</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="account-sortable">
                         <?php foreach ($accounts as $a): ?>
-                            <tr>
+                            <tr data-id="<?= (int)$a['id'] ?>">
+                                <td class="drag-handle" style="cursor:grab; text-align:center;">☰</td>
                                 <td><?= (int)$a['id'] ?></td>
                                 <td><?= h($a['account_name']) ?></td>
                                 <td><?= h($a['account_type']) ?></td>
                                 <td><?= h($a['account_identifier']) ?></td>
+                                <td class="account-sort-order"><?= (int)$a['sort_order'] ?></td>
                                 <td>
                                     <?php if ((int)$a['is_active'] === 1): ?>
                                         <span class="badge badge-green">Active</span>
@@ -199,7 +215,7 @@ if ($result) {
                                     <?php endif; ?>
                                 </td>
                                 <td>
-                                    <a class="table-link" href="index.php?page=accounts&edit=<?= (int)$a['id'] ?>">Edit</a>
+                                    <a class="table-link" href="index.php?page=settings&tab=accounts&edit=<?= (int)$a['id'] ?>">Edit</a>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -209,3 +225,45 @@ if ($result) {
         <?php endif; ?>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const el = document.getElementById('account-sortable');
+
+    if (!el || typeof Sortable === 'undefined') {
+        return;
+    }
+
+    new Sortable(el, {
+        handle: '.drag-handle',
+        animation: 150,
+        ghostClass: 'sortable-ghost',
+        onEnd: function () {
+            const rows = el.querySelectorAll('tr');
+            const order = [];
+
+            rows.forEach((row, index) => {
+                const sortOrder = index + 1;
+                const sortCell = row.querySelector('.account-sort-order');
+
+                if (sortCell) {
+                    sortCell.textContent = sortOrder;
+                }
+
+                order.push({
+                    id: row.dataset.id,
+                    sort_order: sortOrder
+                });
+            });
+
+            fetch('accounts_reorder.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(order)
+            });
+        }
+    });
+});
+</script>

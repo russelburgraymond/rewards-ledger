@@ -48,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $sort_order    = (int)($_POST['sort_order'] ?? 0);
         $is_active     = isset($_POST['is_active']) ? 1 : 0;
 
-        $allowed_behaviors = ['income', 'expense', 'investment', 'withdrawal', 'transfer', 'adjustment'];
+        $allowed_behaviors = ['income', 'expense', 'investment', 'withdrawal', 'transfer', 'adjustment', 'neutral'];
         if (!in_array($behavior_type, $allowed_behaviors, true)) {
             $behavior_type = 'income';
         }
@@ -58,7 +58,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($category_name === '') {
             $error = "Category name is required.";
         } else {
-            if ($id > 0) {
+            $duplicate_id = rl_find_duplicate_id($conn, 'categories', 'category_name', $category_name, $id, ['app_id' => $app_id]);
+
+            if ($duplicate_id > 0) {
+                $error = "A category with that name already exists for the selected app.";
+            } elseif ($id > 0) {
                 $stmt = $conn->prepare("
                     UPDATE categories
                     SET app_id = ?, category_name = ?, behavior_type = ?, sort_order = ?, is_active = ?
@@ -216,6 +220,7 @@ if ($result) {
                     <option value="withdrawal" <?= $edit['behavior_type'] === 'withdrawal' ? 'selected' : '' ?>>Withdrawal</option>
                     <option value="transfer" <?= $edit['behavior_type'] === 'transfer' ? 'selected' : '' ?>>Transfer</option>
                     <option value="adjustment" <?= $edit['behavior_type'] === 'adjustment' ? 'selected' : '' ?>>Adjustment</option>
+                    <option value="neutral" <?= $edit['behavior_type'] === 'neutral' ? 'selected' : '' ?>>Neutral</option>
                 </select>
             </div>
 
@@ -273,7 +278,7 @@ if ($result) {
                                 <td><?= h($c['app_name'] ?? '') ?></td>
                                 <td><?= h($c['category_name']) ?></td>
                                 <td><?= h($c['behavior_type']) ?></td>
-                                <td><?= (int)$c['sort_order'] ?></td>
+                                <td class="sort-order"><?= (int)$c['sort_order'] ?></td>
                                 <td>
                                     <?php if ((int)$c['is_active'] === 1): ?>
                                         <span class="badge badge-green">Active</span>
@@ -308,6 +313,11 @@ document.addEventListener("DOMContentLoaded", function () {
             const order = [];
 
             rows.forEach((row, index) => {
+                const sortCell = row.querySelector('.sort-order');
+                if (sortCell) {
+                    sortCell.textContent = index + 1;
+                }
+
                 order.push({
                     id: row.dataset.id,
                     sort_order: index

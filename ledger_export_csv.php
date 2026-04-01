@@ -5,9 +5,24 @@ require 'helpers.php';
 
 $begin_date = trim($_GET['begin_date'] ?? '');
 $end_date = trim($_GET['end_date'] ?? '');
-$app_id_filter = (int)($_GET['app_id'] ?? 0);
-$category_id_filter = (int)($_GET['category_id'] ?? 0);
-$asset_id_filter = (int)($_GET['asset_id'] ?? 0);
+
+$app_ids_filter = $_GET['app_ids'] ?? [];
+if (!is_array($app_ids_filter)) {
+    $app_ids_filter = [];
+}
+$app_ids_filter = array_values(array_filter(array_map('intval', $app_ids_filter), fn($v) => $v > 0));
+
+$category_ids_filter = $_GET['category_ids'] ?? [];
+if (!is_array($category_ids_filter)) {
+    $category_ids_filter = [];
+}
+$category_ids_filter = array_values(array_filter(array_map('intval', $category_ids_filter), fn($v) => $v > 0));
+
+$asset_ids_filter = $_GET['asset_ids'] ?? [];
+if (!is_array($asset_ids_filter)) {
+    $asset_ids_filter = [];
+}
+$asset_ids_filter = array_values(array_filter(array_map('intval', $asset_ids_filter), fn($v) => $v > 0));
 
 $where_sql = " WHERE 1 = 1 ";
 $params = [];
@@ -25,22 +40,31 @@ if ($end_date !== '') {
     $params[] = $end_date;
 }
 
-if ($app_id_filter > 0) {
-    $where_sql .= " AND b.app_id = ?";
-    $types .= "i";
-    $params[] = $app_id_filter;
+if (!empty($app_ids_filter)) {
+    $placeholders = implode(',', array_fill(0, count($app_ids_filter), '?'));
+    $where_sql .= " AND b.app_id IN ($placeholders)";
+    $types .= str_repeat('i', count($app_ids_filter));
+    foreach ($app_ids_filter as $id) {
+        $params[] = $id;
+    }
 }
 
-if ($category_id_filter > 0) {
-    $where_sql .= " AND bi.category_id = ?";
-    $types .= "i";
-    $params[] = $category_id_filter;
+if (!empty($category_ids_filter)) {
+    $placeholders = implode(',', array_fill(0, count($category_ids_filter), '?'));
+    $where_sql .= " AND bi.category_id IN ($placeholders)";
+    $types .= str_repeat('i', count($category_ids_filter));
+    foreach ($category_ids_filter as $id) {
+        $params[] = $id;
+    }
 }
 
-if ($asset_id_filter > 0) {
-    $where_sql .= " AND bi.asset_id = ?";
-    $types .= "i";
-    $params[] = $asset_id_filter;
+if (!empty($asset_ids_filter)) {
+    $placeholders = implode(',', array_fill(0, count($asset_ids_filter), '?'));
+    $where_sql .= " AND bi.asset_id IN ($placeholders)";
+    $types .= str_repeat('i', count($asset_ids_filter));
+    foreach ($asset_ids_filter as $id) {
+        $params[] = $id;
+    }
 }
 
 /* -----------------------------
@@ -59,6 +83,7 @@ $sql_totals = "
         COALESCE(SUM(
             CASE
                 WHEN c.behavior_type IN ('expense', 'withdrawal', 'investment') THEN -1 * bi.amount
+                WHEN c.behavior_type IN ('transfer', 'neutral') THEN 0
                 ELSE bi.amount
             END
         ), 0) AS total_amount
@@ -152,24 +177,35 @@ $output = fopen('php://output', 'w');
 /* -----------------------------
    LOAD FILTER NAMES
 ----------------------------- */
-function get_name_by_id(mysqli $conn, string $table, string $id_col, string $name_col, int $id): string {
-    if ($id <= 0) return 'All';
+function get_names_by_ids(mysqli $conn, string $table, string $id_col, string $name_col, array $ids): string {
+    if (empty($ids)) return 'All';
 
-    $stmt = $conn->prepare("SELECT {$name_col} FROM {$table} WHERE {$id_col} = ? LIMIT 1");
+    $ids = array_values(array_filter(array_map('intval', $ids), fn($v) => $v > 0));
+    if (empty($ids)) return 'All';
+
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $sql = "SELECT {$name_col} FROM {$table} WHERE {$id_col} IN ($placeholders) ORDER BY {$name_col} ASC";
+    $stmt = $conn->prepare($sql);
     if (!$stmt) return 'Unknown';
 
-    $stmt->bind_param("i", $id);
+    $stmt->bind_param(str_repeat('i', count($ids)), ...$ids);
     $stmt->execute();
     $res = $stmt->get_result();
-    $row = $res ? $res->fetch_assoc() : null;
+
+    $names = [];
+    if ($res) {
+        while ($row = $res->fetch_assoc()) {
+            $names[] = $row[$name_col];
+        }
+    }
     $stmt->close();
 
-    return $row[$name_col] ?? 'Unknown';
+    return $names ? implode(', ', $names) : 'Unknown';
 }
 
-$app_name = get_name_by_id($conn, 'apps', 'id', 'app_name', $app_id_filter);
-$category_name = get_name_by_id($conn, 'categories', 'id', 'category_name', $category_id_filter);
-$asset_name = get_name_by_id($conn, 'assets', 'id', 'asset_name', $asset_id_filter);
+$app_name = get_names_by_ids($conn, 'apps', 'id', 'app_name', $app_ids_filter);
+$category_name = get_names_by_ids($conn, 'categories', 'id', 'category_name', $category_ids_filter);
+$asset_name = get_names_by_ids($conn, 'assets', 'id', 'asset_name', $asset_ids_filter);
 
 /* -----------------------------
    FILTER SUMMARY

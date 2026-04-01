@@ -4,13 +4,15 @@ $current_page = 'settings';
 
 $settings_tabs = [
     'dashboard'     => ['label' => 'Dashboard',        'file' => 'dashboard_settings.php'],
-    'quick_adds'    => ['label' => 'Quick Entry',      'file' => 'quick_adds.php'],
+    'quick_adds'    => ['label' => 'Templates',        'file' => 'quick_adds.php'],
     'apps'          => ['label' => 'Apps',             'file' => 'apps.php'],
     'miners'        => ['label' => 'Miners',           'file' => 'miners.php'],
     'referrals'     => ['label' => 'Referrals',        'file' => 'referrals.php'],
     'categories'    => ['label' => 'Categories',       'file' => 'categories.php'],
     'assets'        => ['label' => 'Assets',           'file' => 'assets.php'],
     'accounts'      => ['label' => 'Accounts',         'file' => 'accounts.php'],
+    'ai_import'     => ['label' => 'AI Import',        'file' => 'ai_import_settings.php'],
+    'other'         => ['label' => 'Other',            'file' => 'other_settings.php'],
     'system_status' => ['label' => 'System Status',    'file' => 'system_status.php'],
     'changelog'     => ['label' => 'Changelog',        'file' => 'changelog.php'],
 ];

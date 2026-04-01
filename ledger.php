@@ -66,11 +66,34 @@ if ($res) while ($row = $res->fetch_assoc()) $referrals[] = $row;
 /* -----------------------------
    FILTERS
 ----------------------------- */
-$begin_date = trim($_GET['begin_date'] ?? date('Y-m-01'));
+$begin_date = trim($_GET['begin_date'] ?? date('Y-01-01'));
 $end_date = trim($_GET['end_date'] ?? date('Y-m-d'));
-$app_id_filter = (int)($_GET['app_id'] ?? 0);
-$category_id_filter = (int)($_GET['category_id'] ?? 0);
-$asset_id_filter = (int)($_GET['asset_id'] ?? 0);
+
+$app_ids_filter = $_GET['app_ids'] ?? [];
+if (!is_array($app_ids_filter)) {
+    $app_ids_filter = [];
+}
+$app_ids_filter = array_values(array_filter(array_map('intval', $app_ids_filter), fn($v) => $v > 0));
+
+$category_ids_filter = $_GET['category_ids'] ?? [];
+if (!is_array($category_ids_filter)) {
+    $category_ids_filter = [];
+}
+$category_ids_filter = array_values(array_filter(array_map('intval', $category_ids_filter), fn($v) => $v > 0));
+
+$asset_ids_filter = $_GET['asset_ids'] ?? [];
+if (!is_array($asset_ids_filter)) {
+    $asset_ids_filter = [];
+}
+$asset_ids_filter = array_values(array_filter(array_map('intval', $asset_ids_filter), fn($v) => $v > 0));
+
+$per_page_allowed = [25, 50, 100, 250];
+$per_page = (int)($_GET['per_page'] ?? 25);
+if (!in_array($per_page, $per_page_allowed, true)) {
+    $per_page = 25;
+}
+
+$ledger_page_num = max(1, (int)($_GET['ledger_page_num'] ?? 1));
 
 /* -----------------------------
    HANDLE DELETE
@@ -86,15 +109,17 @@ if (isset($_GET['delete'])) {
             $stmt->execute();
             $stmt->close();
 
-            $qs = http_build_query([
-                'page' => 'ledger',
-                'begin_date' => $begin_date,
-                'end_date' => $end_date,
-                'app_id' => $app_id_filter,
-                'category_id' => $category_id_filter,
-                'asset_id' => $asset_id_filter,
-                'deleted' => 1
-            ]);
+			$qs = http_build_query([
+				'page' => 'ledger',
+				'begin_date' => $begin_date,
+				'end_date' => $end_date,
+				'app_ids' => $app_ids_filter,
+				'category_ids' => $category_ids_filter,
+				'asset_ids' => $asset_ids_filter,
+				'per_page' => $per_page,
+				'ledger_page_num' => $ledger_page_num,
+				'deleted' => 1
+			]);
             header("Location: index.php?{$qs}");
             exit;
         } else {
@@ -271,9 +296,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                     'page' => 'ledger',
                     'begin_date' => $begin_date,
                     'end_date' => $end_date,
-                    'app_id' => $app_id_filter,
-                    'category_id' => $category_id_filter,
-                    'asset_id' => $asset_id_filter,
+                    'app_ids' => $app_ids_filter,
+                    'category_ids' => $category_ids_filter,
+                    'asset_ids' => $asset_ids_filter,
+                    'per_page' => $per_page,
+                    'ledger_page_num' => $ledger_page_num,
                     'updated' => 1
                 ]);
                 header("Location: index.php?{$qs}");
@@ -304,22 +331,31 @@ if ($end_date !== '') {
     $params[] = $end_date;
 }
 
-if ($app_id_filter > 0) {
-    $where_sql .= " AND b.app_id = ?";
-    $types .= "i";
-    $params[] = $app_id_filter;
+if (!empty($app_ids_filter)) {
+    $placeholders = implode(',', array_fill(0, count($app_ids_filter), '?'));
+    $where_sql .= " AND b.app_id IN ($placeholders)";
+    $types .= str_repeat('i', count($app_ids_filter));
+    foreach ($app_ids_filter as $id) {
+        $params[] = $id;
+    }
 }
 
-if ($category_id_filter > 0) {
-    $where_sql .= " AND bi.category_id = ?";
-    $types .= "i";
-    $params[] = $category_id_filter;
+if (!empty($category_ids_filter)) {
+    $placeholders = implode(',', array_fill(0, count($category_ids_filter), '?'));
+    $where_sql .= " AND bi.category_id IN ($placeholders)";
+    $types .= str_repeat('i', count($category_ids_filter));
+    foreach ($category_ids_filter as $id) {
+        $params[] = $id;
+    }
 }
 
-if ($asset_id_filter > 0) {
-    $where_sql .= " AND bi.asset_id = ?";
-    $types .= "i";
-    $params[] = $asset_id_filter;
+if (!empty($asset_ids_filter)) {
+    $placeholders = implode(',', array_fill(0, count($asset_ids_filter), '?'));
+    $where_sql .= " AND bi.asset_id IN ($placeholders)";
+    $types .= str_repeat('i', count($asset_ids_filter));
+    foreach ($asset_ids_filter as $id) {
+        $params[] = $id;
+    }
 }
 
 /* -----------------------------
@@ -328,9 +364,9 @@ if ($asset_id_filter > 0) {
 $export_query = http_build_query([
     'begin_date' => $begin_date,
     'end_date' => $end_date,
-    'app_id' => $app_id_filter,
-    'category_id' => $category_id_filter,
-    'asset_id' => $asset_id_filter,
+    'app_ids' => $app_ids_filter,
+    'category_ids' => $category_ids_filter,
+    'asset_ids' => $asset_ids_filter,
 ]);
 
 /* -----------------------------
@@ -349,6 +385,7 @@ $sql_totals = "
         COALESCE(SUM(
             CASE
                 WHEN c.behavior_type IN ('expense', 'withdrawal', 'investment') THEN -1 * bi.amount
+                WHEN c.behavior_type IN ('transfer', 'neutral') THEN 0
                 ELSE bi.amount
             END
         ), 0) AS total_amount
@@ -385,6 +422,39 @@ if ($stmt) {
 } else {
     $error = "Could not load ledger totals: " . $conn->error;
 }
+
+/* -----------------------------
+   COUNT LEDGER ROWS
+----------------------------- */
+$total_ledger_rows = 0;
+
+$sql_count = "
+    SELECT COUNT(*) AS total_rows
+    FROM batch_items bi
+    INNER JOIN batches b ON b.id = bi.batch_id
+    {$where_sql}
+";
+
+$stmt = $conn->prepare($sql_count);
+
+if ($stmt) {
+    if ($types !== '') {
+        $stmt->bind_param($types, ...$params);
+    }
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $count_row = $res ? $res->fetch_assoc() : null;
+    $total_ledger_rows = (int)($count_row['total_rows'] ?? 0);
+    $stmt->close();
+} else {
+    $error = "Could not count ledger rows: " . $conn->error;
+}
+
+$total_pages = max(1, (int)ceil($total_ledger_rows / $per_page));
+if ($ledger_page_num > $total_pages) {
+    $ledger_page_num = $total_pages;
+}
+$offset = ($ledger_page_num - 1) * $per_page;
 
 /* -----------------------------
    LOAD LEDGER LIST
@@ -427,15 +497,20 @@ $sql = "
     LEFT JOIN accounts ta ON ta.id = bi.to_account_id
     {$where_sql}
     ORDER BY b.batch_date DESC, bi.id DESC
+	LIMIT ? OFFSET ?
 ";
 
 $stmt = $conn->prepare($sql);
 
 if ($stmt) {
-    if ($types !== '') {
-        $stmt->bind_param($types, ...$params);
-    }
+    $list_types = $types . "ii";
+    $list_params = $params;
+    $list_params[] = $per_page;
+    $list_params[] = $offset;
+
+    $stmt->bind_param($list_types, ...$list_params);
     $stmt->execute();
+	
     $res = $stmt->get_result();
 
     if ($res) {
@@ -463,78 +538,236 @@ if ($stmt) {
     <div class="alert alert-success"><?= h($success) ?></div>
 <?php endif; ?>
 
+<?php
+$selected_app_names = [];
+foreach ($apps as $app) {
+    if (in_array((int)$app['id'], $app_ids_filter, true)) {
+        $selected_app_names[] = $app['app_name'];
+    }
+}
+
+$selected_category_names = [];
+foreach ($categories as $category) {
+    if (in_array((int)$category['id'], $category_ids_filter, true)) {
+        $selected_category_names[] = $category['category_name'];
+    }
+}
+
+$selected_asset_names = [];
+foreach ($assets as $asset) {
+    if (in_array((int)$asset['id'], $asset_ids_filter, true)) {
+        $selected_asset_names[] = $asset['asset_name'];
+    }
+}
+?>
+
 <div class="card">
-    <h3>Filters</h3>
+    <div class="card-toggle-head">
+        <h3 style="margin:0;">Filters</h3>
+        <button type="button" class="btn btn-secondary btn-sm" id="toggle-ledger-filters">Show Filters</button>
+    </div>
 
-    <form method="get" class="ledger-filter-form">
-        <input type="hidden" name="page" value="ledger">
+    <?php
+    $filter_summary_base = [
+        'page' => 'ledger',
+        'begin_date' => $begin_date,
+        'end_date' => $end_date,
+        'app_ids' => $app_ids_filter,
+        'category_ids' => $category_ids_filter,
+        'asset_ids' => $asset_ids_filter,
+        'per_page' => $per_page,
+    ];
 
-        <div class="ledger-filter-grid">
-            <div class="form-row">
-                <label for="begin_date">Begin Date</label>
-                <input type="date" id="begin_date" name="begin_date" value="<?= h($begin_date) ?>">
+    $clear_begin_query = $filter_summary_base;
+    $clear_begin_query['begin_date'] = '';
+
+    $clear_end_query = $filter_summary_base;
+    $clear_end_query['end_date'] = '';
+
+    $clear_apps_query = $filter_summary_base;
+    $clear_apps_query['app_ids'] = [];
+
+    $clear_categories_query = $filter_summary_base;
+    $clear_categories_query['category_ids'] = [];
+
+    $clear_assets_query = $filter_summary_base;
+    $clear_assets_query['asset_ids'] = [];
+    ?>
+
+    <div class="filter-summary">
+        <strong>Active Filters:</strong>
+
+        <?php if ($begin_date !== ''): ?>
+            <a class="filter-pill" href="index.php?<?= h(http_build_query($clear_begin_query)) ?>" title="Clear begin date filter">
+                From: <?= h($begin_date) ?> ×
+            </a>
+        <?php else: ?>
+            <span class="filter-pill">From: All</span>
+        <?php endif; ?>
+
+        <?php if ($end_date !== ''): ?>
+            <a class="filter-pill" href="index.php?<?= h(http_build_query($clear_end_query)) ?>" title="Clear end date filter">
+                To: <?= h($end_date) ?> ×
+            </a>
+        <?php else: ?>
+            <span class="filter-pill">To: All</span>
+        <?php endif; ?>
+
+        <?php if (!empty($selected_app_names)): ?>
+            <a class="filter-pill" href="index.php?<?= h(http_build_query($clear_apps_query)) ?>" title="Clear app filters">
+                Apps: <?= h(implode(', ', $selected_app_names)) ?> ×
+            </a>
+        <?php else: ?>
+            <span class="filter-pill">Apps: All</span>
+        <?php endif; ?>
+
+        <?php if (!empty($selected_category_names)): ?>
+            <a class="filter-pill" href="index.php?<?= h(http_build_query($clear_categories_query)) ?>" title="Clear category filters">
+                Categories: <?= h(implode(', ', $selected_category_names)) ?> ×
+            </a>
+        <?php else: ?>
+            <span class="filter-pill">Categories: All</span>
+        <?php endif; ?>
+
+        <?php if (!empty($selected_asset_names)): ?>
+            <a class="filter-pill" href="index.php?<?= h(http_build_query($clear_assets_query)) ?>" title="Clear asset filters">
+                Assets: <?= h(implode(', ', $selected_asset_names)) ?> ×
+            </a>
+        <?php else: ?>
+            <span class="filter-pill">Assets: All</span>
+        <?php endif; ?>
+    </div>
+
+    <div id="ledger-filters-panel">
+        <form method="get" class="ledger-filter-form">
+            <input type="hidden" name="page" value="ledger">
+
+            <div class="ledger-filter-grid">
+
+                <div class="form-row ledger-filter-dates">
+                    <label>Dates</label>
+
+                    <div class="filter-topline"></div>
+
+                    <div class="filter-date-box">
+                        <div>
+                            <label for="begin_date">Begin Date</label>
+                            <input type="date" id="begin_date" name="begin_date" value="<?= h($begin_date) ?>">
+                        </div>
+
+                        <div>
+                            <label for="end_date">End Date</label>
+                            <input type="date" id="end_date" name="end_date" value="<?= h($end_date) ?>">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="form-row ledger-filter-apps">
+                    <label>Apps</label>
+
+                    <div class="filter-topline">
+                        <label class="filter-checklist-item">
+                            <input type="checkbox" class="js-apps-all" <?= empty($app_ids_filter) ? 'checked' : '' ?>>
+                            <span>All Apps</span>
+                        </label>
+                    </div>
+
+                    <div class="filter-checklist-box">
+                        <?php foreach ($apps as $app): ?>
+                            <label class="filter-checklist-item">
+                                <input
+                                    type="checkbox"
+                                    name="app_ids[]"
+                                    value="<?= (int)$app['id'] ?>"
+                                    <?= in_array((int)$app['id'], $app_ids_filter, true) ? 'checked' : '' ?>
+                                >
+                                <span><?= h($app['app_name']) ?></span>
+                            </label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+
+                <div class="form-row ledger-filter-categories">
+                    <label>Categories</label>
+
+                    <div class="filter-topline">
+                        <label class="filter-checklist-item">
+                            <input type="checkbox" class="js-categories-all" <?= empty($category_ids_filter) ? 'checked' : '' ?>>
+                            <span>All Categories</span>
+                        </label>
+                    </div>
+
+                    <div class="filter-checklist-box">
+                        <?php foreach ($categories as $category): ?>
+                            <label
+                                class="filter-checklist-item category-filter-item"
+                                data-app-id="<?= (int)$category['app_id'] ?>"
+                            >
+                                <input
+                                    type="checkbox"
+                                    name="category_ids[]"
+                                    value="<?= (int)$category['id'] ?>"
+                                    <?= in_array((int)$category['id'], $category_ids_filter, true) ? 'checked' : '' ?>
+                                >
+                                <span><?= h($category['category_name']) ?></span>
+                            </label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+
+                <div class="form-row ledger-filter-assets">
+                    <label>Assets</label>
+
+                    <div class="filter-topline">
+                        <label class="filter-checklist-item">
+                            <input type="checkbox" class="js-assets-all" <?= empty($asset_ids_filter) ? 'checked' : '' ?>>
+                            <span>All Assets</span>
+                        </label>
+                    </div>
+
+                    <div class="filter-checklist-box">
+                        <?php foreach ($assets as $asset): ?>
+                            <label class="filter-checklist-item">
+                                <input
+                                    type="checkbox"
+                                    name="asset_ids[]"
+                                    value="<?= (int)$asset['id'] ?>"
+                                    <?= in_array((int)$asset['id'], $asset_ids_filter, true) ? 'checked' : '' ?>
+                                >
+                                <span><?= h($asset['asset_name']) ?></span>
+                            </label>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+
+                <div class="form-row ledger-filter-per-page">
+                    <label>Display</label>
+
+                    <div class="filter-topline"></div>
+
+                    <div class="filter-display-box">
+                        <label for="per_page">Rows Per Page</label>
+                        <select id="per_page" name="per_page">
+                            <?php foreach ($per_page_allowed as $pp): ?>
+                                <option value="<?= (int)$pp ?>" <?= $per_page === (int)$pp ? 'selected' : '' ?>>
+                                    <?= (int)$pp ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="form-row ledger-filter-actions">
+                    <label>&nbsp;</label>
+                    <div class="ledger-filter-buttons">
+                        <button type="submit" class="btn btn-primary">Apply Filters</button>
+                        <a class="btn btn-secondary" href="index.php?page=ledger">Reset</a>
+                    </div>
+                </div>
+
             </div>
-
-            <div class="form-row">
-                <label for="end_date">End Date</label>
-                <input type="date" id="end_date" name="end_date" value="<?= h($end_date) ?>">
-            </div>
-
-            <div class="form-row">
-                <label for="app_id">App</label>
-                <select id="app_id" name="app_id">
-                    <option value="0">All Apps</option>
-                    <?php foreach ($apps as $app): ?>
-                        <option value="<?= (int)$app['id'] ?>" <?= $app_id_filter === (int)$app['id'] ? 'selected' : '' ?>>
-                            <?= h($app['app_name']) ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-
-            <div class="form-row">
-                <label for="category_id">Category</label>
-                <select id="category_id" name="category_id">
-                    <option value="0">All Categories</option>
-                    <?php foreach ($categories as $category): ?>
-                        <option
-                            value="<?= (int)$category['id'] ?>"
-                            data-app-id="<?= (int)$category['app_id'] ?>"
-                            <?= $category_id_filter === (int)$category['id'] ? 'selected' : '' ?>
-                        >
-                            <?= h($category['category_name']) ?>
-                            <?php if (!empty($category['behavior_type'])): ?>
-                                (<?= h($category['behavior_type']) ?>)
-                            <?php endif; ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-
-            <div class="form-row">
-                <label for="asset_id">Asset</label>
-                <select id="asset_id" name="asset_id">
-                    <option value="0">All Assets</option>
-                    <?php foreach ($assets as $asset): ?>
-                        <option value="<?= (int)$asset['id'] ?>" <?= $asset_id_filter === (int)$asset['id'] ? 'selected' : '' ?>>
-                            <?= h($asset['asset_name']) ?>
-                            <?php if (!empty($asset['asset_symbol'])): ?>
-                                (<?= h($asset['asset_symbol']) ?>)
-                            <?php endif; ?>
-                        </option>
-                    <?php endforeach; ?>
-                </select>
-            </div>
-
-            <div class="form-row ledger-filter-actions">
-                <label>&nbsp;</label>
-				<div class="ledger-filter-buttons">
-					<button type="submit" class="btn btn-primary">Apply Filters</button>
-					<a class="btn btn-secondary" href="index.php?page=ledger">Reset</a>
-				</div>
-            </div>
-        </div>
-    </form>
+        </form>
+    </div>
 </div>
 
 <div class="card mt-20">
@@ -568,6 +801,21 @@ if ($stmt) {
         </div>
     <?php endif; ?>
 </div>
+
+
+
+<?php
+$base_filter_query = [
+    'page' => 'ledger',
+    'begin_date' => $begin_date,
+    'end_date' => $end_date,
+    'app_ids' => $app_ids_filter,
+    'category_ids' => $category_ids_filter,
+    'asset_ids' => $asset_ids_filter,
+    'per_page' => $per_page,
+    'ledger_page_num' => $ledger_page_num,
+];
+?>
 
 <?php if ((int)$edit['id'] > 0): ?>
     <div class="card mt-20">
@@ -688,7 +936,7 @@ if ($stmt) {
             </div>
 
             <button type="submit" class="btn btn-primary">Save Ledger Item</button>
-            <a class="btn btn-secondary" href="index.php?page=ledger&begin_date=<?= urlencode($begin_date) ?>&end_date=<?= urlencode($end_date) ?>&app_id=<?= (int)$app_id_filter ?>&category_id=<?= (int)$category_id_filter ?>&asset_id=<?= (int)$asset_id_filter ?>">Cancel Edit</a>
+            <a class="btn btn-secondary" href="index.php?<?= h(http_build_query($base_filter_query)) ?>">Cancel Edit</a>
         </form>
     </div>
 <?php endif; ?>
@@ -749,13 +997,13 @@ if ($stmt) {
                             )) ?></td>
                             <td><?= h($row['notes'] ?? '') ?></td>
                             <td>
-                                <a class="table-link" href="index.php?page=ledger&begin_date=<?= urlencode($begin_date) ?>&end_date=<?= urlencode($end_date) ?>&app_id=<?= (int)$app_id_filter ?>&category_id=<?= (int)$category_id_filter ?>&asset_id=<?= (int)$asset_id_filter ?>&edit=<?= (int)$row['id'] ?>">
+                                <a class="table-link" href="index.php?<?= h(http_build_query($base_filter_query + ['edit' => (int)$row['id']])) ?>">
                                     Edit
                                 </a>
                             </td>
                             <td>
                                 <a class="table-link"
-                                   href="index.php?page=ledger&begin_date=<?= urlencode($begin_date) ?>&end_date=<?= urlencode($end_date) ?>&app_id=<?= (int)$app_id_filter ?>&category_id=<?= (int)$category_id_filter ?>&asset_id=<?= (int)$asset_id_filter ?>&delete=<?= (int)$row['id'] ?>"
+                                   href="index.php?<?= h(http_build_query($base_filter_query + ['delete' => (int)$row['id']])) ?>"
                                    onclick="return confirm('Delete this ledger item?');">
                                     Delete
                                 </a>
@@ -766,65 +1014,172 @@ if ($stmt) {
             </table>
         </div>
     <?php endif; ?>
+	<?php if ($total_ledger_rows > 0): ?>
+    <?php
+    $base_paging = [
+        'page' => 'ledger',
+        'begin_date' => $begin_date,
+        'end_date' => $end_date,
+        'app_ids' => $app_ids_filter,
+        'category_ids' => $category_ids_filter,
+        'asset_ids' => $asset_ids_filter,
+        'per_page' => $per_page,
+    ];
+
+    $from_row = $offset + 1;
+    $to_row = min($offset + $per_page, $total_ledger_rows);
+    ?>
+<div class="ledger-pagination">
+    <div class="ledger-pagination-info">
+        Showing <?= (int)$from_row ?>–<?= (int)$to_row ?> of <?= (int)$total_ledger_rows ?> entries
+    </div>
+
+    <div class="ledger-pagination-links">
+        <?php if ($ledger_page_num > 1): ?>
+            <a class="btn btn-secondary"
+               href="index.php?<?= h(http_build_query($base_paging + ['ledger_page_num' => 1])) ?>">
+                First
+            </a>
+
+            <a class="btn btn-secondary"
+               href="index.php?<?= h(http_build_query($base_paging + ['ledger_page_num' => $ledger_page_num - 1])) ?>">
+                Prev
+            </a>
+        <?php else: ?>
+            <span class="btn btn-secondary disabled">First</span>
+            <span class="btn btn-secondary disabled">Prev</span>
+        <?php endif; ?>
+
+        <span class="subtext">Page <?= (int)$ledger_page_num ?> of <?= (int)$total_pages ?></span>
+
+        <?php if ($ledger_page_num < $total_pages): ?>
+            <a class="btn btn-secondary"
+               href="index.php?<?= h(http_build_query($base_paging + ['ledger_page_num' => $ledger_page_num + 1])) ?>">
+                Next
+            </a>
+
+            <a class="btn btn-secondary"
+               href="index.php?<?= h(http_build_query($base_paging + ['ledger_page_num' => $total_pages])) ?>">
+                Last
+            </a>
+        <?php else: ?>
+            <span class="btn btn-secondary disabled">Next</span>
+            <span class="btn btn-secondary disabled">Last</span>
+        <?php endif; ?>
+    </div>
+</div>
+	
+	
+<?php endif; ?>
 </div>
 
 <script>
-document.addEventListener("DOMContentLoaded", function () {
-    const filterAppSelect = document.getElementById("app_id");
-    const filterCategorySelect = document.getElementById("category_id");
+document.addEventListener('DOMContentLoaded', function () {
+    const filterPanel = document.getElementById('ledger-filters-panel');
+    const filterToggleBtn = document.getElementById('toggle-ledger-filters');
+    const storageKey = 'ledger_filters_collapsed';
 
-    function filterFilterCategoriesByApp() {
-        if (!filterAppSelect || !filterCategorySelect) return;
+    function setFilterState(collapsed) {
+        if (!filterPanel || !filterToggleBtn) return;
 
-        const selectedAppId = filterAppSelect.value;
-
-        Array.from(filterCategorySelect.options).forEach(function (opt, index) {
-            if (index === 0) {
-                opt.hidden = false;
-                return;
-            }
-
-            const optionAppId = opt.getAttribute("data-app-id");
-            opt.hidden = (selectedAppId !== "0" && optionAppId !== selectedAppId);
-        });
-
-        const selectedOption = filterCategorySelect.options[filterCategorySelect.selectedIndex];
-        if (selectedOption && selectedOption.hidden) {
-            filterCategorySelect.value = "0";
+        if (collapsed) {
+            filterPanel.classList.add('filters-collapsed');
+            filterToggleBtn.textContent = 'Show Filters';
+        } else {
+            filterPanel.classList.remove('filters-collapsed');
+            filterToggleBtn.textContent = 'Hide Filters';
         }
     }
 
-    if (filterAppSelect && filterCategorySelect) {
-        filterAppSelect.addEventListener("change", filterFilterCategoriesByApp);
-        filterFilterCategoriesByApp();
+    if (filterPanel && filterToggleBtn) {
+        const savedValue = localStorage.getItem(storageKey);
+        const shouldStartCollapsed = (savedValue === null) ? true : (savedValue === '1');
+        setFilterState(shouldStartCollapsed);
+
+        filterToggleBtn.addEventListener('click', function () {
+            const isCollapsed = filterPanel.classList.contains('filters-collapsed');
+            const next = !isCollapsed;
+            setFilterState(next);
+            localStorage.setItem(storageKey, next ? '1' : '0');
+        });
     }
 
-    const editAppSelect = document.getElementById("edit_app_id");
-    const editCategorySelect = document.getElementById("edit_category_id");
+    function wireAllToggle(allSelector, itemSelector) {
+        const allBox = document.querySelector(allSelector);
+        const boxes = Array.from(document.querySelectorAll(itemSelector));
+
+        function syncAll() {
+            const checkedCount = boxes.filter(cb => cb.checked).length;
+            if (allBox) {
+                allBox.checked = checkedCount === 0;
+            }
+        }
+
+        if (allBox) {
+            allBox.addEventListener('change', function () {
+                if (allBox.checked) {
+                    boxes.forEach(cb => cb.checked = false);
+                }
+            });
+        }
+
+        boxes.forEach(cb => {
+            cb.addEventListener('change', function () {
+                if (cb.checked && allBox) {
+                    allBox.checked = false;
+                }
+                syncAll();
+            });
+        });
+
+        syncAll();
+    }
+
+    wireAllToggle('.js-apps-all', 'input[name="app_ids[]"]');
+    wireAllToggle('.js-categories-all', 'input[name="category_ids[]"]');
+    wireAllToggle('.js-assets-all', 'input[name="asset_ids[]"]');
+
+    const appBoxes = Array.from(document.querySelectorAll('input[name="app_ids[]"]'));
+    const categoryLabels = Array.from(document.querySelectorAll('.category-filter-item'));
+
+    function filterCategoriesByApps() {
+        const selectedApps = appBoxes.filter(cb => cb.checked).map(cb => parseInt(cb.value, 10));
+
+        categoryLabels.forEach(label => {
+            const catAppId = parseInt(label.getAttribute('data-app-id') || '0', 10);
+            label.style.display = (selectedApps.length === 0 || selectedApps.includes(catAppId)) ? '' : 'none';
+        });
+    }
+
+    appBoxes.forEach(cb => cb.addEventListener('change', filterCategoriesByApps));
+    filterCategoriesByApps();
+
+    const editAppSelect = document.getElementById('edit_app_id');
+    const editCategorySelect = document.getElementById('edit_category_id');
 
     function filterEditCategoriesByApp() {
         if (!editAppSelect || !editCategorySelect) return;
 
         const selectedAppId = editAppSelect.value;
 
-        Array.from(editCategorySelect.options).forEach(function (opt, index) {
+        Array.from(editCategorySelect.options).forEach((opt, index) => {
             if (index === 0) {
                 opt.hidden = false;
                 return;
             }
 
-            const optionAppId = opt.getAttribute("data-app-id");
+            const optionAppId = opt.getAttribute('data-app-id');
             opt.hidden = (optionAppId !== selectedAppId);
         });
 
         const selectedOption = editCategorySelect.options[editCategorySelect.selectedIndex];
         if (selectedOption && selectedOption.hidden) {
-            editCategorySelect.value = "0";
+            editCategorySelect.value = '0';
         }
     }
 
     if (editAppSelect && editCategorySelect) {
-        editAppSelect.addEventListener("change", filterEditCategoriesByApp);
+        editAppSelect.addEventListener('change', filterEditCategoriesByApp);
         filterEditCategoriesByApp();
     }
 });

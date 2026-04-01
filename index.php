@@ -21,6 +21,8 @@ $allowed_pages = [
     'miners',
     'referrals',
     'apps',
+	'wiki',
+	'ai_import',
     'categories',
     'assets',
     'accounts',
@@ -28,6 +30,7 @@ $allowed_pages = [
     'template_edit',
     'template_use',
     'template_delete',
+	'assets_reorder',
     'onboarding',
 ];
 
