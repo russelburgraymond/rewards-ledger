@@ -31,6 +31,7 @@ $allowed_pages = [
     'template_use',
     'template_delete',
 	'assets_reorder',
+	'categories_reorder',
     'onboarding',
 ];
 

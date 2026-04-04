@@ -45,12 +45,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $app_id        = (int)($_POST['app_id'] ?? 0);
         $category_name = trim($_POST['category_name'] ?? '');
         $behavior_type = trim($_POST['behavior_type'] ?? 'income');
-        $sort_order    = (int)($_POST['sort_order'] ?? 0);
         $is_active     = isset($_POST['is_active']) ? 1 : 0;
 
         $allowed_behaviors = ['income', 'expense', 'investment', 'withdrawal', 'transfer', 'adjustment', 'neutral'];
         if (!in_array($behavior_type, $allowed_behaviors, true)) {
             $behavior_type = 'income';
+        }
+
+        // ---------------------
+        // Determine sort_order
+        // ---------------------
+        if ($id > 0 && isset($_POST['sort_order']) && trim((string)$_POST['sort_order']) !== '') {
+            $sort_order = max(1, (int)$_POST['sort_order']);
+        } else {
+            // New categories should always be added to the end of the list.
+            $res_max = $conn->query("SELECT MAX(sort_order) AS max_sort FROM categories");
+            $row_max = $res_max ? $res_max->fetch_assoc() : null;
+            $sort_order = ($row_max && isset($row_max['max_sort'])) ? ((int)$row_max['max_sort'] + 1) : 1;
         }
 
         if ($app_id <= 0) {
@@ -108,7 +119,7 @@ $edit = [
     'app_id' => !empty($apps) ? (int)$apps[0]['id'] : 0,
     'category_name' => '',
     'behavior_type' => 'income',
-    'sort_order' => 0,
+    'sort_order' => '',
     'is_active' => 1,
 ];
 

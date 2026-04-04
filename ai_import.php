@@ -47,36 +47,36 @@ function ai_import_load_default_categories(mysqli $conn, string $screenType): ar
 function ai_import_prompt_for_screen(string $screenType): string {
     if ($screenType === 'wallet') {
         return <<<PROMPT
-Read this GoMining wallet history screenshot and convert it into RewardLedger import lines.
+Read this GoMining screenshot and convert it into RewardLedger import lines.
 
 Use this exact format:
-YYYY-MM-DD|GoMining|Category Name|Asset|Amount
+YYYY-MM-DD|HH:MM:SS|GoMining|Category Name|Asset|Amount
 
-Wallet mapping:
-Mining reward = Daily Net Rewards
-Miner Maintenance = Daily Maintenance
-NFT Reinvestment = Reinvestment
-Referral bonus = Referral Bonus
-veGoMining = veGoMining Reward
-Efficiency Upgrade = Miner Upgrade
-Power Upgrade = Miner Upgrade
-Withdraw / Withdrawal = Transfer
+Rules:
+- Return EVERY line in the screenshot that contains a numeric amount
+- Do NOT skip anything with a value
+- One ledger line per amount shown
+- Do NOT combine multiple amounts into one line
+- Use the exact date shown in the screenshot
+- Use the exact time shown in the screenshot
+- Keep the date and time together in this format: YYYY-MM-DD HH:MM:SS
+- Use the exact label shown for the Category Name (do NOT rename it)
+- Use the asset exactly as shown (BTC or GoMining Token)
+- Do NOT assume anything — only use what is visible
+
+CRITICAL:
+NEVER change the sign of any amount.
+If the value is negative in the screenshot, it MUST remain negative.
+If the value is positive, it MUST remain positive.
+NEVER round, shorten, or reformat the amount.
+Keep the amount digits exactly as shown in the screenshot.
 
 Important:
+- Do NOT make any amounts negative
+- Do NOT interpret or categorize (no mapping like PR → Daily Rewards)
+- If multiple entries exist for the same type on the same date, output each one separately
 - Return ONLY the import lines
-- Do NOT add commentary
-- Put the answer in a SINGLE plain-text code block so I can use the Copy button / Copy all option
-- One ledger line per history row
-- Use the correct asset shown for each line (for example BTC or GoMining Token)
-- Do NOT combine multiple assets into one line
-- Do NOT make Daily Maintenance, Reinvestment, or Miner Upgrade negative
-- Keep the values exactly as shown in the screenshot
-- Ignore rows that are not visible in the screenshot
-
-Example:
-2026-03-28|GoMining|Daily Net Rewards|Bitcoin|0.00000521
-2026-03-28|GoMining|Referral Bonus|GoMining Token|0.08
-2026-03-28|GoMining|Daily Maintenance|GoMining Token|0.31
+- Put the answer in a SINGLE plain-text code block
 PROMPT;
     }
 
@@ -270,16 +270,29 @@ function ai_import_should_route_to_wallet(string $behavior): bool {
     return in_array($behavior, ['income'], true);
 }
 
-function ai_import_normalize_amount_for_behavior(float $amount, string $behavior): float {
-    $behavior = ai_import_normalize_label($behavior);
-    if (in_array($behavior, ['expense', 'investment', 'withdrawal'], true)) {
-        return abs($amount);
-    }
-    return $amount;
+function ai_import_clean_amount_string(string $amount): string {
+    return str_replace([',', '$', ' '], '', trim($amount));
 }
 
-function ai_import_decimal_string(float $amount, int $scale = 8): string {
-    return sprintf('%.' . $scale . 'F', $amount);
+function ai_import_is_valid_amount_string(string $amount): bool {
+    return (bool)preg_match('/^-?\d+(?:\.\d+)?$/', $amount);
+}
+
+function ai_import_abs_amount_string(string $amount): string {
+    return ltrim(trim($amount), '+-');
+}
+
+function ai_import_normalize_amount_for_behavior_string(string $amount, string $behavior, string $screen_type): string {
+    $amount = ai_import_clean_amount_string($amount);
+    if ($screen_type === 'wallet') {
+        return $amount;
+    }
+
+    $behavior = ai_import_normalize_label($behavior);
+    if (in_array($behavior, ['expense', 'investment', 'withdrawal'], true)) {
+        return ai_import_abs_amount_string($amount);
+    }
+    return $amount;
 }
 
 function ai_import_overlap_mode_category_names(string $screenType): array {
@@ -288,8 +301,13 @@ function ai_import_overlap_mode_category_names(string $screenType): array {
         : ['Daily Gross Rewards', 'Daily Electricity', 'Daily Maintenance', 'Daily Net Rewards'];
 }
 
+function ai_import_is_time_value(string $value): bool {
+    return (bool)preg_match('/^\d{2}:\d{2}(:\d{2})?$/', trim($value));
+}
+
 function ai_import_parse_lines(
     string $text,
+    string $screen_type,
     array $app_map,
     array $category_map,
     array $asset_map,
@@ -314,22 +332,32 @@ function ai_import_parse_lines(
             continue;
         }
 
+        $has_received_time = count($parts) >= 6 && ai_import_is_time_value((string)($parts[1] ?? ''));
+
         $date_raw = $parts[0] ?? '';
-        $app_raw = $parts[1] ?? '';
-        $category_raw = $parts[2] ?? '';
-        $asset_raw = $parts[3] ?? '';
-        $amount_raw = $parts[4] ?? '';
-        $miner_raw = $parts[5] ?? '';
-        $referral_raw = $parts[6] ?? '';
-        $from_account_raw = $parts[7] ?? '';
-        $to_account_raw = $parts[8] ?? '';
-        $notes_raw = $parts[9] ?? '';
+        $received_time_raw = $has_received_time ? ($parts[1] ?? '') : '';
+        $app_raw = $has_received_time ? ($parts[2] ?? '') : ($parts[1] ?? '');
+        $category_raw = $has_received_time ? ($parts[3] ?? '') : ($parts[2] ?? '');
+        $asset_raw = $has_received_time ? ($parts[4] ?? '') : ($parts[3] ?? '');
+        $amount_raw = $has_received_time ? ($parts[5] ?? '') : ($parts[4] ?? '');
+        $miner_raw = $has_received_time ? ($parts[6] ?? '') : ($parts[5] ?? '');
+        $referral_raw = $has_received_time ? ($parts[7] ?? '') : ($parts[6] ?? '');
+        $from_account_raw = $has_received_time ? ($parts[8] ?? '') : ($parts[7] ?? '');
+        $to_account_raw = $has_received_time ? ($parts[9] ?? '') : ($parts[8] ?? '');
+        $notes_raw = $has_received_time ? ($parts[10] ?? '') : ($parts[9] ?? '');
 
         $date_obj = DateTime::createFromFormat('Y-m-d', $date_raw);
         if (!$date_obj || $date_obj->format('Y-m-d') !== $date_raw) {
             $errors[] = 'Line ' . ($line_no + 1) . ': invalid date "' . $date_raw . '". Use YYYY-MM-DD.';
             continue;
         }
+        if ($received_time_raw !== '' && !ai_import_is_time_value($received_time_raw)) {
+            $errors[] = 'Line ' . ($line_no + 1) . ': invalid time "' . $received_time_raw . '". Use HH:MM or HH:MM:SS.';
+            continue;
+        }
+        $received_time_db = $received_time_raw !== ''
+            ? (strlen($received_time_raw) === 5 ? $received_time_raw . ':00' : $received_time_raw)
+            : null;
 
         $category_name = ai_import_category_alias($category_raw, $category_alias_rows);
         $asset_name = ai_import_asset_alias($asset_raw, $asset_alias_rows);
@@ -360,8 +388,13 @@ function ai_import_parse_lines(
             continue;
         }
 
-        $amount_clean = str_replace([',', '$'], '', $amount_raw);
-        if ($amount_clean === '' || !is_numeric($amount_clean)) {
+        // ======================================================
+        // [AI IMPORT] PRESERVE EXACT AMOUNT VALUE
+        // ======================================================
+        // Keep the exact amount string so tiny crypto values do not
+        // lose precision or sign during preview/save.
+        $amount_clean = ai_import_clean_amount_string((string)$amount_raw);
+        if ($amount_clean === '' || !ai_import_is_valid_amount_string($amount_clean)) {
             $errors[] = 'Line ' . ($line_no + 1) . ': invalid amount "' . $amount_raw . '".';
             continue;
         }
@@ -428,15 +461,19 @@ function ai_import_parse_lines(
             }
         }
 
-        $normalized_amount = ai_import_normalize_amount_for_behavior((float)$amount_clean, (string)($category_map[$category_key]['behavior_type'] ?? ''));
-        $normalized_amount_string = ai_import_decimal_string($normalized_amount, 8);
-        $raw_amount_string = ai_import_decimal_string((float)$amount_clean, 8);
+        $normalized_amount_string = ai_import_normalize_amount_for_behavior_string(
+            $amount_clean,
+            (string)($category_map[$category_key]['behavior_type'] ?? ''),
+            $screen_type
+        );
+        $raw_amount_string = $amount_clean;
 
         $rows[] = [
             'line_no' => $line_no + 1,
             'batch_date' => $date_raw,
             'app_id' => (int)$app_map[$app_key]['id'],
             'app_name' => $app_map[$app_key]['app_name'],
+            'received_time' => $received_time_db,
             'category_id' => $category_id,
             'category_name' => $category_map[$category_key]['category_name'],
             'asset_id' => (int)$asset_map[$asset_key]['id'],
@@ -523,6 +560,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $parsed = ai_import_parse_lines(
             $raw_import_text,
+            $selected_screen_type,
             $app_map,
             $category_map,
             $asset_map,
@@ -571,9 +609,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             from_account_id,
                             to_account_id,
                             amount,
+                            received_time,
                             notes,
                             import_source_type
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
                         if (!$stmt_batch || !$stmt_item) {
                             throw new Exception('Could not prepare import statements.');
                         }
@@ -588,8 +627,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             }
                             $batch_id = $batch_cache[$batch_key];
                             $notes = (string)$row['notes'];
+
+                            // ======================================================
+                            // [AI IMPORT] PRESERVE EXACT AMOUNT STRING ON SAVE
+                            // ======================================================
+                            // Keep the imported amount as a string so tiny crypto values
+                            // are not forced through PHP float conversion before insert.
                             $amount = (string)$row['amount'];
-                            $stmt_item->bind_param('iiiiiiisss', $batch_id, $row['miner_id'], $row['asset_id'], $row['category_id'], $row['referral_id'], $row['from_account_id'], $row['to_account_id'], $amount, $notes, $sourceType);
+                            $received_time = $row['received_time'];
+                            $stmt_item->bind_param('iiiiiiissss', $batch_id, $row['miner_id'], $row['asset_id'], $row['category_id'], $row['referral_id'], $row['from_account_id'], $row['to_account_id'], $amount, $received_time, $notes, $sourceType);
                             $stmt_item->execute();
                         }
                         $stmt_batch->close();
@@ -703,7 +749,8 @@ $chatgpt_prompt = ai_import_prompt_for_screen($selected_screen_type);
     <h3>Accepted Format</h3>
     <p class="subtext">Required fields are the first 5. Optional fields can be left blank, but keep the separators if you use later fields.</p>
     <div class="form-row">
-        <textarea readonly rows="4">YYYY-MM-DD|App|Category|Asset|Amount|Miner|Referral|From Account|To Account|Notes</textarea>
+        <textarea readonly rows="5">YYYY-MM-DD|App|Category|Asset|Amount|Miner|Referral|From Account|To Account|Notes
+YYYY-MM-DD|HH:MM:SS|App|Category|Asset|Amount|Miner|Referral|From Account|To Account|Notes</textarea>
     </div>
 </div>
 
@@ -718,6 +765,7 @@ $chatgpt_prompt = ai_import_prompt_for_screen($selected_screen_type);
                     <tr>
                         <th style="width:70px;">Line</th>
                         <th style="width:120px;">Date</th>
+                        <th style="width:110px;">Time</th>
                         <th>App</th>
                         <th>Category</th>
                         <th>Asset</th>
@@ -732,6 +780,7 @@ $chatgpt_prompt = ai_import_prompt_for_screen($selected_screen_type);
                         <tr>
                             <td><?= (int)$row['line_no'] ?></td>
                             <td><?= h($row['batch_date']) ?></td>
+                            <td><?= h((string)($row['received_time'] ?? '')) ?></td>
                             <td><?= h($row['app_name']) ?></td>
                             <td><?= h($row['category_name']) ?></td>
                             <td><?= h($row['asset_name']) ?></td>

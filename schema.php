@@ -128,7 +128,7 @@ if (!function_exists('rl_upsert_schema_version')) {
 
 if (!function_exists('ensure_schema')) {
     function ensure_schema(mysqli $conn): void {
-        $schemaVersion = '2.1.3';
+        $schemaVersion = '2.1.4';
 
         // accounts
         rl_exec($conn, "CREATE TABLE IF NOT EXISTS `accounts` (
@@ -253,9 +253,9 @@ if (!function_exists('ensure_schema')) {
           `referral_id` int UNSIGNED NOT NULL DEFAULT '0',
           `from_account_id` int UNSIGNED NOT NULL DEFAULT '0',
           `to_account_id` int UNSIGNED NOT NULL DEFAULT '0',
-          `amount` decimal(18,8) NOT NULL DEFAULT '0.00000000',
+          `amount` decimal(30,16) NOT NULL DEFAULT '0.0000000000000000',
           `received_time` time DEFAULT NULL,
-          `value_at_receipt` decimal(18,8) DEFAULT NULL,
+          `value_at_receipt` decimal(30,16) DEFAULT NULL,
           `notes` text DEFAULT NULL,
           `import_source_type` varchar(50) NOT NULL DEFAULT '',
           `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -271,9 +271,9 @@ if (!function_exists('ensure_schema')) {
             'referral_id' => "int UNSIGNED NOT NULL DEFAULT '0'",
             'from_account_id' => "int UNSIGNED NOT NULL DEFAULT '0'",
             'to_account_id' => "int UNSIGNED NOT NULL DEFAULT '0'",
-            'amount' => "decimal(18,8) NOT NULL DEFAULT '0.00000000'",
+            'amount' => "decimal(30,16) NOT NULL DEFAULT '0.0000000000000000'",
             'received_time' => 'time DEFAULT NULL',
-            'value_at_receipt' => "decimal(18,8) DEFAULT NULL",
+            'value_at_receipt' => "decimal(30,16) DEFAULT NULL",
             'notes' => 'text DEFAULT NULL',
             'import_source_type' => "varchar(50) NOT NULL DEFAULT ''",
             'created_at' => 'timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP',
@@ -281,6 +281,15 @@ if (!function_exists('ensure_schema')) {
         ] as $col => $def) {
             rl_add_column($conn, 'batch_items', $col, $def);
         }
+        // ======================================================
+        // [SCHEMA] HIGHER DECIMAL PRECISION FOR IMPORTED AMOUNTS
+        // ======================================================
+        // Preserve tiny crypto values more safely during AI import and later edits.
+        // NOTE: Only alter batch_items here. batch_lines is created later in this file,
+        // so modifying it here breaks clean installs before the table exists.
+        rl_exec($conn, "ALTER TABLE `batch_items` MODIFY `amount` decimal(30,16) NOT NULL DEFAULT '0.0000000000000000'");
+        rl_exec($conn, "ALTER TABLE `batch_items` MODIFY `value_at_receipt` decimal(30,16) DEFAULT NULL");
+
         foreach ([
             'idx_bi_batch' => 'KEY `idx_bi_batch` (`batch_id`)',
             'idx_bi_template_item' => 'KEY `idx_bi_template_item` (`template_item_id`)',
@@ -305,7 +314,7 @@ if (!function_exists('ensure_schema')) {
           `miner_id` int UNSIGNED DEFAULT NULL,
           `line_label` varchar(150) NOT NULL DEFAULT '',
           `description` varchar(255) NOT NULL DEFAULT '',
-          `amount` decimal(18,8) NOT NULL DEFAULT '0.00000000',
+          `amount` decimal(30,16) NOT NULL DEFAULT '0.0000000000000000',
           `notes` text DEFAULT NULL,
           `sort_order` int NOT NULL DEFAULT '0',
           `created_at` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -320,7 +329,7 @@ if (!function_exists('ensure_schema')) {
             'miner_id' => 'int UNSIGNED DEFAULT NULL',
             'line_label' => "varchar(150) NOT NULL DEFAULT ''",
             'description' => "varchar(255) NOT NULL DEFAULT ''",
-            'amount' => "decimal(18,8) NOT NULL DEFAULT '0.00000000'",
+            'amount' => "decimal(30,16) NOT NULL DEFAULT '0.0000000000000000'",
             'notes' => 'text DEFAULT NULL',
             'sort_order' => "int NOT NULL DEFAULT '0'",
             'created_at' => 'timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP',
@@ -338,6 +347,12 @@ if (!function_exists('ensure_schema')) {
         ] as $name => $def) {
             rl_add_index($conn, 'batch_lines', $name, $def);
         }
+
+        // ======================================================
+        // [SCHEMA] HIGHER DECIMAL PRECISION FOR BATCH LINES
+        // ======================================================
+        // Apply this after batch_lines exists so fresh installs do not fail.
+        rl_exec($conn, "ALTER TABLE `batch_lines` MODIFY `amount` decimal(30,16) NOT NULL DEFAULT '0.0000000000000000'");
 
         // categories
         rl_exec($conn, "CREATE TABLE IF NOT EXISTS `categories` (
