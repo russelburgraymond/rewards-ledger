@@ -8,16 +8,6 @@ A PHP/MySQL ledger-style tracker for GoMining activity.
 - Local server (Laragon / UniServerZ recommended)
 
 ## Setup
-Note: I highly recommend using my Menu system from here:
-https://github.com/russelburgraymond/project_menu
-then simply download this, drop it in to the projects folder
-and the menu system will automatically add it. My menu system 
-allows you to add your own projects to it as well.  Manually or 
-automatically.  To add it automatically create a project_info.json
-like the one in this one and Change the category to either 
-"In-Progress", "Finished", "Development" and it will be categorized
-as such.
-
 1. Clone repo
 2. Copy db.example.php to db.php and update credentials.
 3. Update db.php with your credentials

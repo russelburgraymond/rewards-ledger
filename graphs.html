@@ -1,0 +1,74 @@
+<div class="wiki-prose">
+  <div class="wiki-hero">
+    <div>
+      <div class="wiki-eyebrow">RewardLedger Wiki</div>
+      <h1>Graphs</h1>
+      <p class="wiki-intro">The Graphs page gives you a visual view of trends so you can see profit direction, compare income vs expense periods, and spot which categories are driving totals.</p>
+    </div>
+    <div class="wiki-hero-actions">
+      <button type="button" class="wiki-btn wiki-expand-all">Expand all</button>
+      <button type="button" class="wiki-btn wiki-collapse-all">Collapse all</button>
+    </div>
+  </div>
+
+  <details class="wiki-section" open>
+    <summary>What the first graph page includes</summary>
+    <div>
+      <ul>
+        <li><strong>Net Profit Over Time</strong> line chart</li>
+        <li><strong>Income vs Expense</strong> bar chart with <strong>Combined Totals</strong> and <strong>Stacked by App</strong> views</li>
+        <li><strong>Category Breakdown</strong> donut chart</li>
+        <li>Summary totals for income, expense, and net profit</li>
+      </ul>
+    </div>
+  </details>
+
+  <details class="wiki-section" open>
+    <summary>Filters</summary>
+    <div>
+      <p>The Graphs page includes filters so you can narrow the chart data without changing the ledger.</p>
+      <ul>
+        <li><strong>Date mode</strong>: All Time, Current Year, or Custom Range</li>
+        <li><strong>Group by</strong>: Day, Week, or Month</li>
+        <li><strong>Income / Expense View</strong>: Combined Totals or Stacked by App</li>
+        <li><strong>Apps</strong>, <strong>Categories</strong>, and <strong>Assets</strong> multi-select filters</li>
+      </ul>
+      <p>If you choose <strong>Current Year</strong>, the charts only use entries dated from January 1 of the current year forward.</p>
+    </div>
+  </details>
+
+  <details class="wiki-section">
+    <summary>How profit is calculated</summary>
+    <div>
+      <p>The Graphs page uses category behavior types so the visuals follow the same logic as the rest of the app.</p>
+      <ul>
+        <li><strong>Income</strong>-style behaviors are counted as positive</li>
+        <li><strong>Expense</strong>, <strong>Investment</strong>, and similar outflow behaviors are counted as negative for profit</li>
+        <li><strong>Transfer</strong>, <strong>Neutral</strong>, and <strong>Adjustment</strong> are excluded from profit math</li>
+      </ul>
+    </div>
+  </details>
+
+
+  <details class="wiki-section">
+    <summary>Income vs Expense stacked by app</summary>
+    <div>
+      <p>The Income vs Expense chart can now split each bar into app sections so you can see how much of the total came from each app.</p>
+      <ul>
+        <li><strong>Stacked by App</strong> shows each period as stacked sections with a legend</li>
+        <li>Each stacked bar pair is labeled directly underneath as <strong>Income</strong> and <strong>Expense</strong> so you can tell the two bar types apart without looking elsewhere</li>
+        <li>If you manually select apps in the filter, the stacked chart legend keeps those selected apps visible so the color key stays consistent</li>
+        <li><strong>Combined Totals</strong> keeps the simpler side-by-side bars</li>
+      </ul>
+      <p>This is useful when you want to compare overall income and expense totals without losing visibility into which app contributed each part.</p>
+    </div>
+  </details>
+
+  <details class="wiki-section">
+    <summary>Notes</summary>
+    <div>
+      <p>The charts are self-contained and do not rely on outside script links or outside image links.</p>
+      <p>This keeps RewardLedger portable and in line with the rest of the app.</p>
+    </div>
+  </details>
+</div>

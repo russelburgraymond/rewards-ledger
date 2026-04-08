@@ -159,6 +159,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
     $is_multi_add = isset($_POST['is_multi_add']) ? 1 : 0;
     $sort_order = (int)($_POST['sort_order'] ?? 0);
+
+    if ($id <= 0 && $sort_order <= 0) {
+        $resSort = $conn->query("SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_sort_order FROM quick_add_items");
+        if ($resSort) {
+            $rowSort = $resSort->fetch_assoc();
+            $sort_order = (int)($rowSort['next_sort_order'] ?? 1);
+            $resSort->free();
+        } else {
+            $sort_order = 1;
+        }
+    }
     $is_active = isset($_POST['is_active']) ? 1 : 0;
 
     if ($app_id <= 0) {
@@ -765,7 +776,7 @@ $show_quick_add_form = ((int)$edit['id'] > 0) || (($_GET['action'] ?? '') === 'c
                                         <span class="badge badge-gray">No</span>
                                     <?php endif; ?>
                                 </td>
-                                <td><?= (int)$qa['sort_order'] ?></td>
+                                <td class="sort-order"><?= (int)$qa['sort_order'] ?></td>
                                 <td>
                                     <?php if ((int)$qa['is_active'] === 1): ?>
                                         <span class="badge badge-green">Active</span>

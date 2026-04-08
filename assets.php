@@ -170,9 +170,10 @@ $result = $conn->query("
         currency_symbol,
         display_decimals,
         is_fiat,
-        is_active
+        is_active,
+        sort_order
     FROM assets
-    ORDER BY is_active DESC, sort_order ASC, asset_name ASC, id ASC
+    ORDER BY sort_order ASC, asset_name ASC, id ASC
 ");
 
 if ($result) {
@@ -293,6 +294,7 @@ if ($result) {
                             <th style="width:90px;">Code</th>
                             <th style="width:100px;">Symbol</th>
                             <th style="width:90px;">Decimals</th>
+                            <th style="width:80px;">Sort</th>
                             <th style="width:80px;">Fiat</th>
                             <th style="width:100px;">Status</th>
                             <th style="width:90px;">Edit</th>
@@ -307,6 +309,7 @@ if ($result) {
                                 <td><?= h($a['asset_symbol']) ?></td>
                                 <td><?= h($a['currency_symbol']) ?></td>
                                 <td><?= (int)$a['display_decimals'] ?></td>
+                                <td class="asset-sort-order"><?= (int)$a['sort_order'] ?></td>
                                 <td>
                                     <?php if ((int)$a['is_fiat'] === 1): ?>
                                         <span class="badge badge-green">Yes</span>
@@ -348,9 +351,16 @@ document.addEventListener('DOMContentLoaded', function () {
             const order = [];
 
             rows.forEach((row, index) => {
+                const sortOrder = index + 1;
+                const sortCell = row.querySelector('.asset-sort-order');
+
+                if (sortCell) {
+                    sortCell.textContent = sortOrder;
+                }
+
                 order.push({
                     id: row.dataset.id,
-                    sort_order: index
+                    sort_order: sortOrder
                 });
             });
 

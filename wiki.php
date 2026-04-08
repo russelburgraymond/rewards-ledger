@@ -10,6 +10,7 @@ $wiki_pages = [
     'transfers' => 'Transfers & Wallet Logic',
     'categories' => 'Categories',
     'dashboard' => 'Dashboard',
+    'graphs' => 'Graphs',
     'data_integrity' => 'Data Integrity',
     'settings' => 'Settings',
     'backup_restore' => 'Backup & Restore',

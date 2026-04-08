@@ -20,6 +20,7 @@ $current_page = $current_page ?? 'dashboard';
 
 <div class="menu">
     <a href="index.php" class="<?= $current_page === 'dashboard' ? 'active' : '' ?>">Dashboard</a>
+    <a href="index.php?page=graphs" class="<?= $current_page === 'graphs' ? 'active' : '' ?>">Graphs</a>
 	<a href="index.php?page=templates" class="<?= in_array($current_page, ['templates', 'template_edit', 'template_use'], true) ? 'active' : '' ?>">Templates</a>
 	<a href="index.php?page=quick_entry" class="<?= $current_page === 'quick_entry' ? 'active' : '' ?>">Quick Entry</a>
     <a href="index.php?page=ledger" class="<?= $current_page === 'ledger' ? 'active' : '' ?>">Ledger</a>

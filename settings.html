@@ -1,0 +1,133 @@
+<div class="wiki-prose">
+  <div class="wiki-hero">
+    <div>
+      <div class="wiki-eyebrow">RewardLedger Wiki</div>
+      <h1>Settings</h1>
+      <p class="wiki-intro">Settings centralizes app management pages so setup data, AI Import defaults, and other utilities stay organized in one place.</p>
+    </div>
+    <div class="wiki-hero-actions">
+      <button type="button" class="wiki-btn wiki-expand-all">Expand all</button>
+      <button type="button" class="wiki-btn wiki-collapse-all">Collapse all</button>
+    </div>
+  </div>
+
+  <details class="wiki-section" open>
+    <summary>What lives under Settings</summary>
+    <div>
+      <ul>
+        <li>Assets</li>
+        <li>Accounts</li>
+        <li>Categories</li>
+        <li>Apps</li>
+        <li>App order can be changed by drag and drop on the Apps tab.</li>
+        <li>Miners</li>
+        <li>Referrals</li>
+        <li>Accounts, Miners, and Referrals can now also be reordered by drag and drop.</li>
+        <li>Dashboard Settings</li>
+        <li>AI Import</li>
+        <li>Other</li>
+        <li>System Status</li>
+      </ul>
+    </div>
+  </details>
+
+
+  <details class="wiki-section">
+    <summary>Dashboard Settings</summary>
+    <div>
+      <p><strong>Dashboard Settings</strong> controls which category tiles appear on the dashboard and how those tile totals behave.</p>
+      <ul>
+        <li><strong>Dashboard date range</strong> switches dashboard tiles between <strong>All Time</strong> totals and <strong>Current Year</strong> totals.</li>
+        <li><strong>Number of dashboard tile rows</strong> controls how many drop rows are shown by the dashboard layout editor.</li>
+        <li><strong>Show Value at Receipt / Cost at Payment totals</strong> adds those rollups to eligible dashboard tiles.</li>
+      </ul>
+    </div>
+  </details>
+
+
+  <details class="wiki-section">
+    <summary>Calculated Tiles in Dashboard Settings</summary>
+    <div>
+      <p>The <strong>Dashboard</strong> settings tab can now create <strong>Calculated Tiles</strong>.</p>
+      <ul>
+        <li>Give the tile a name such as <strong>Approximate Gross</strong>.</li>
+        <li>Add one or more category lines.</li>
+        <li>Choose whether each line should <strong>Add</strong> or <strong>Subtract</strong>.</li>
+        <li>Choose whether each line uses <strong>Absolute Amount</strong> or <strong>Raw Signed Amount</strong>.</li>
+      </ul>
+      <p>This allows you to build custom dashboard math without hard-coding new dashboard tiles into the app.</p>
+    </div>
+  </details>
+
+  <details class="wiki-section" open>
+    <summary>AI Import settings</summary>
+    <div>
+      <p>The AI Import settings page now has a clearer split between <strong>Rewards Screen</strong> and <strong>Wallet</strong>.</p>
+      <ul>
+        <li><strong>Preferred Tracking Mode</strong> chooses which screenshot type is selected by default on the AI Import page.</li>
+        <li><strong>Default Categories by Screenshot Type</strong> controls which category boxes start checked for Rewards Screen imports and Wallet imports.</li>
+        <li><strong>Category Aliases</strong> are grouped by screenshot type so you can keep Wallet wording separate from Rewards Screen wording.</li>
+        <li><strong>Asset Aliases</strong> stay shared because BTC, GMT, USD, and similar labels are reused across both screenshot models.</li>
+      </ul>
+    </div>
+  </details>
+
+  <details class="wiki-section">
+    <summary>Why AI Import aliases are grouped now</summary>
+    <div>
+      <p>Rewards Screen and Wallet do not label the same information the same way. Grouping aliases by screenshot type helps avoid confusion and gives cleaner control over what AI Import is allowed to look for in each mode.</p>
+    </div>
+  </details>
+
+  <details class="wiki-section">
+    <summary>Apps tab</summary>
+    <div>
+      <p>The <strong>Apps</strong> tab lets you add, edit, activate, and reorder apps. Drag rows in the app list using the handle on the left to update display order quickly.</p>
+      <ul>
+        <li>New apps are now added to the end of the list automatically using the next available sort order.</li>
+        <li>This prevents multiple newly added apps from all starting at sort order <strong>0</strong>.</li>
+      </ul>
+    </div>
+  </details>
+
+  <details class="wiki-section">
+    <summary>Accounts, Miners, and Referrals ordering</summary>
+    <div>
+      <p>The <strong>Accounts</strong>, <strong>Miners</strong>, and <strong>Referrals</strong> tabs now support drag-and-drop row reordering just like Apps and Templates.</p>
+      <ul>
+        <li>Use the handle on the left side of each row to drag items into a new order.</li>
+        <li>New accounts, miners, and referrals are added to the end of the list automatically using the next available sort order.</li>
+        <li>This prevents multiple new rows from being created with a sort order of <strong>0</strong>.</li>
+      </ul>
+    </div>
+  </details>
+
+
+  <details class="wiki-section">
+    <summary>Templates and Quick Entry ordering</summary>
+    <div>
+      <p>The <strong>Settings → Templates</strong> area keeps both <strong>Templates</strong> and <strong>Quick Entry Items</strong> in sort order.</p>
+      <ul>
+        <li>New templates are now added to the end of the template list automatically instead of starting at sort order <strong>0</strong>.</li>
+        <li>New Quick Entry items are now added to the end of the Quick Entry list automatically instead of starting at sort order <strong>0</strong>.</li>
+        <li>Quick Entry items created from template lines also use the next available sort order.</li>
+        <li>When you drag and drop Quick Entry items in Settings, the visible Sort column updates immediately to match the saved order.</li>
+        <li>Template drag-and-drop reordering in Settings now saves correctly and stays in the new order after the page is refreshed.</li>
+      </ul>
+    </div>
+  </details>
+
+  <details class="wiki-section">
+    <summary>Other tab</summary>
+    <div>
+      <p>The <strong>Other</strong> tab is where backup and restore tools belong, along with other app-wide utility actions that do not fit a normal data table.</p>
+    </div>
+  </details>
+
+  <details class="wiki-section">
+    <summary>System Status</summary>
+    <div>
+      <p>Use System Status to verify important technical details about the running app and environment.</p>
+    </div>
+  </details>
+</div>

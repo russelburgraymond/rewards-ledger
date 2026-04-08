@@ -102,14 +102,22 @@ if ($res) {
 
 if ($template_id <= 0) {
     $default_app_id = !empty($apps) ? (int)$apps[0]['id'] : 0;
+    $template_sort_order = 1;
+
+    $resSort = $conn->query("SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_sort_order FROM templates");
+    if ($resSort) {
+        $rowSort = $resSort->fetch_assoc();
+        $template_sort_order = (int)($rowSort['next_sort_order'] ?? 1);
+        $resSort->free();
+    }
 
     $stmt = $conn->prepare("
-        INSERT INTO templates (app_id, template_name, notes)
-        VALUES (?, 'New Template', '')
+        INSERT INTO templates (app_id, template_name, notes, sort_order)
+        VALUES (?, 'New Template', '', ?)
     ");
 
     if ($stmt) {
-        $stmt->bind_param("i", $default_app_id);
+        $stmt->bind_param("ii", $default_app_id, $template_sort_order);
         $stmt->execute();
         $template_id = (int)$stmt->insert_id;
         $stmt->close();
@@ -444,7 +452,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                         ");
 
                         if ($stmtQa) {
-                            $sort_order = 0;
+                            $sort_order = 1;
+                            $resQaSort = $conn->query("SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_sort_order FROM quick_add_items");
+                            if ($resQaSort) {
+                                $rowQaSort = $resQaSort->fetch_assoc();
+                                $sort_order = (int)($rowQaSort['next_sort_order'] ?? 1);
+                                $resQaSort->free();
+                            }
                             $is_active = 1;
 
                             $stmtQa->bind_param(
@@ -595,7 +609,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                         ");
 
                         if ($stmtQa) {
-                            $qa_sort_order = 0;
+                            $qa_sort_order = 1;
+                            $resQaSort = $conn->query("SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_sort_order FROM quick_add_items");
+                            if ($resQaSort) {
+                                $rowQaSort = $resQaSort->fetch_assoc();
+                                $qa_sort_order = (int)($rowQaSort['next_sort_order'] ?? 1);
+                                $resQaSort->free();
+                            }
                             $qa_active = 1;
 
                             $stmtQa->bind_param(

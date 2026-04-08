@@ -1,6 +1,97 @@
+## v2.1.6
+
+### ✨ Improvements
+
+- Shortened Income/Expense bar labels on the Graphs page to **Inc.** and **Exp.** for cleaner display
+
+---
+
+## v2.1.5
+
+- Added direct **Income** and **Expense** labels underneath each bar on the Graphs page stacked bar view
+- Increased stacked bar chart bottom spacing so the per-bar labels stay readable
+- Updated Graphs wiki page
+
+----------------------------------------
+
+## v2.1.3
+
+- Fixed Graphs stacked-by-app legend so selected apps stay visible in the legend color key
+- Kept stacked graph app colors consistent with the selected app filter order
+- Updated Graphs wiki page
+
+----------------------------------------
+v2.1.2
+----------------------------------------
+
+- Fixed stacked Income vs Expense graph app segments rendering in their assigned colors instead of black
+- Corrected stacked bar visual styling so app breakdowns display properly while keeping the legend in sync
+
 # 📘 RewardLedger – Version History
 
 All notable changes to this application are documented here.
+
+---
+
+
+## 🚀 v2.1.1
+
+### 🛠 Improvements
+
+* Added stacked-by-app mode to the Income vs Expense graph.
+* Added an Income / Expense View selector so users can switch between stacked app bars and combined totals.
+* Added an app legend to the stacked bars so users can see which app makes up each section of each bar.
+
+---
+
+
+## 🚀 v2.1.0
+
+### ✨ Features
+
+* Added a new Graphs page with a local self-contained chart system.
+* Added Net Profit Over Time, Income vs Expense, and Category Breakdown charts.
+* Added graph filters for date mode, custom date range, grouping, apps, categories, and assets.
+* Added summary totals above the charts for income, expense, and net profit.
+
+---
+
+## 🚀 v2.0.6
+
+### 🔧 Fixes
+
+* Fixed Templates drag-and-drop reorder saving in Settings so the new order now persists after refresh.
+* Standardized the Templates reorder endpoint to match the working reorder handlers used elsewhere in Settings.
+
+---
+
+## 🚀 v2.0.5
+
+### 🔧 Fixes
+
+* New templates now save using the next available sort order instead of defaulting to **0**
+* New Quick Entry items now save using the next available sort order instead of defaulting to **0**
+* Quick Entry items created from template lines now also use the next available sort order
+* Quick Entry sort numbers now update on screen immediately after drag-and-drop in Settings
+
+---
+
+## 🚀 v2.0.4
+
+### 🛠 Fixes
+* Fixed Assets drag-and-drop reordering so the visible Sort column updates immediately after rows are moved.
+* Standardized Assets sort numbering to save in 1-based order so it matches Accounts.
+
+---
+
+## 🚀 v2.0.3
+
+### 🛠 Improvements
+* Added Database Maintenance tools to Settings → Other.
+* Added Optimize Database action for safe table cleanup and overhead reduction.
+* Added Repair Database action for safe table repair checks.
+* Added maintenance stats and guidance in the Other tab.
+* Updated wiki to document the new maintenance tools.
 
 ---
 

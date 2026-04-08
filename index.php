@@ -16,6 +16,7 @@ $allowed_pages = [
     'changelog',
     'quick_entry',
     'ledger',
+    'graphs',
     'dashboard_settings',
     'quick_adds',
     'miners',
