@@ -132,4 +132,38 @@ function batch_entry_notice_html(): string {
     return '<div class="batch-note"><strong>Batch Entry:</strong> This item was entered together with other items. Changing shared fields like date will update all items in this batch.</div>';
 }
 
+
+function rl_is_btc_asset_row(array $asset): bool
+{
+    $symbol = strtoupper(trim((string)($asset['asset_symbol'] ?? '')));
+    $name = strtolower(trim((string)($asset['asset_name'] ?? '')));
+
+    return $symbol === 'BTC' || $name === 'bitcoin';
+}
+
+function rl_is_btc_asset_id(mysqli $conn, int $asset_id): bool
+{
+    if ($asset_id <= 0) {
+        return false;
+    }
+
+    $stmt = $conn->prepare("SELECT asset_name, asset_symbol FROM assets WHERE id = ? LIMIT 1");
+    if (!$stmt) {
+        return false;
+    }
+
+    $stmt->bind_param('i', $asset_id);
+    $stmt->execute();
+    $res = $stmt->get_result();
+    $asset = $res ? $res->fetch_assoc() : null;
+    $stmt->close();
+
+    return is_array($asset) ? rl_is_btc_asset_row($asset) : false;
+}
+
+function rl_sats_to_btc_float($value): float
+{
+    return ((float)$value) / 100000000;
+}
+
 ?>

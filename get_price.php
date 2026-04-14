@@ -30,6 +30,7 @@ $asset_id   = (int)($data['asset_id'] ?? $data['asset'] ?? 0);
 $amount_raw = trim((string)($data['amount'] ?? ''));
 $date_raw   = trim((string)($data['date'] ?? ''));
 $time_raw   = trim((string)($data['time'] ?? ''));
+$use_sats   = !empty($data['use_sats']) ? 1 : 0;
 
 if ($asset_id <= 0 || $amount_raw === '' || !is_numeric($amount_raw) || $date_raw === '' || $time_raw === '') {
     http_response_code(400);
@@ -56,6 +57,9 @@ if (!$asset) {
 }
 
 $amount = (float)$amount_raw;
+if ($use_sats === 1 && rl_is_btc_asset_row($asset)) {
+    $amount = rl_sats_to_btc_float($amount_raw);
+}
 if ((int)($asset['is_fiat'] ?? 0) === 1) {
     echo json_encode([
         'success' => true,
@@ -171,7 +175,7 @@ if (!$date_obj || !$time_24) {
 $coin_id = rl_detect_coin_id($asset);
 if ($coin_id === '') {
     http_response_code(400);
-    echo json_encode(['success' => false, 'error' => 'Lookup not available for this asset. Enter value manually if needed.']);
+    echo json_encode(['success' => false, 'error' => 'This asset is not mapped for price lookup yet.']);
     exit;
 }
 

@@ -1,0 +1,88 @@
+<div class="wiki-prose">
+  <div class="wiki-hero">
+    <div>
+      <div class="wiki-eyebrow">RewardLedger Wiki</div>
+      <h1>Getting Started</h1>
+      <p class="wiki-intro">Use this page after a fresh install, after moving to a new machine, or any time you want to confirm the app is configured correctly before entering real data.</p>
+    </div>
+    <div class="wiki-hero-actions">
+      <button type="button" class="wiki-btn wiki-expand-all">Expand all</button>
+      <button type="button" class="wiki-btn wiki-collapse-all">Collapse all</button>
+    </div>
+  </div>
+  
+<div class="wiki-callout warn"><strong>Do not blindly add defaults again.</strong> RewardLedger may already include common setup data such as BTC, GoMining Token, USD, GoMining accounts, and common categories.</div>
+
+<details class="wiki-section" open>
+  <summary>Step 1: Confirm database connection</summary>
+  <div>
+    <p>RewardLedger uses your <code>config.php</code> database settings. Make sure the host, username, password, and database name are correct for your local environment.</p>
+    <ul>
+      <li>If the database does not exist yet, create it first in phpMyAdmin or your preferred MySQL tool.</li>
+      <li>After the connection works, RewardLedger can create or update its tables.</li>
+      <li>If onboarding is available, work through it instead of manually forcing tables unless you know exactly what you are doing.</li>
+        <li>When editing a ledger item, saved Time Received and Value at Time Received values are loaded back into the edit form.</li>
+</ul>
+  </div>
+</details>
+
+<details class="wiki-section" open>
+  <summary>Step 2: Review existing defaults</summary>
+  <div>
+    <p>Before adding anything, open each of these pages and look at what already exists:</p>
+    <ul>
+      <li><strong>Assets</strong></li>
+      <li><strong>Accounts</strong></li>
+      <li><strong>Categories</strong></li>
+      <li><strong>Apps</strong></li>
+      <li><strong>Dashboard Settings</strong></li>
+    </ul>
+    <p>If defaults already exist, use them instead of creating duplicates.</p>
+  </div>
+</details>
+
+<details class="wiki-section">
+  <summary>Step 3: Add miners and custom accounts</summary>
+  <div>
+    <p>Add only the records that are unique to you, such as:</p>
+    <ul>
+      <li>Your miner IDs</li>
+      <li>Your custom wallets or cash accounts</li>
+      <li>Any extra apps beyond the defaults</li>
+      <li>Any categories that are truly specific to your workflow</li>
+    </ul>
+  </div>
+</details>
+
+<details class="wiki-section">
+  <summary>Step 4: Choose your entry method</summary>
+  <div>
+    <div class="wiki-grid two">
+      <div class="wiki-panel">
+        <h3>Quick Entry</h3>
+        <p>Best for normal day-to-day manual entry.</p>
+      </div>
+      <div class="wiki-panel">
+        <h3>AI Import</h3>
+        <p>Best for screenshot conversion and paste-import workflows.</p>
+      </div>
+      <div class="wiki-panel">
+        <h3>Templates</h3>
+        <p>Best for repeated, structured multi-line entries.</p>
+      </div>
+      <div class="wiki-panel">
+        <h3>Ledger</h3>
+        <p>Best for review, correction, filtering, exports, and editing saved rows including received time and value-at-receipt details.</p>
+      </div>
+    </div>
+  </div>
+</details>
+
+<details class="wiki-section">
+  <summary>Step 5: Make a backup before major edits</summary>
+  <div>
+    <p>Once the app is configured the way you want, create a backup. Do this before schema changes, major data imports, or broad cleanup work.</p>
+  </div>
+</details>
+
+</div>

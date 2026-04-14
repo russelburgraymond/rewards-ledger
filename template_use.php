@@ -146,6 +146,7 @@ $stmt = $conn->prepare("
         ti.show_notes,
         " . ($ti_has_received_time ? "ti.show_received_time" : "1") . " AS show_received_time,
         " . ($ti_has_value_at_receipt ? "ti.show_value_at_receipt" : "1") . " AS show_value_at_receipt,
+        ti.use_sats,
         ti.show_from_account,
         ti.show_to_account,
         ti.is_multi_add,
@@ -229,6 +230,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         $amounts = $_POST['amount'] ?? [];
         $received_times = $_POST['received_time'] ?? [];
         $value_at_receipts = $_POST['value_at_receipt'] ?? [];
+        $use_sats_flags = $_POST['use_sats'] ?? [];
         $line_notes = $_POST['line_notes'] ?? [];
 
         foreach ($_POST['line_template_id'] as $idx => $template_line_id) {
@@ -241,6 +243,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             $amount_raw = trim((string)($amounts[$idx] ?? '0'));
             $received_time_raw = trim((string)($received_times[$idx] ?? ''));
             $value_at_receipt_raw = trim((string)($value_at_receipts[$idx] ?? ''));
+            $use_sats = !empty($use_sats_flags[$idx]) ? 1 : 0;
             $notes_value = trim((string)($line_notes[$idx] ?? ''));
 
             if ($amount_raw === '' || !is_numeric($amount_raw)) {
@@ -252,6 +255,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             $received_time = ($received_time_raw !== '' && preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $received_time_raw))
                 ? $received_time_raw
                 : null;
+            if ($use_sats === 1 && rl_is_btc_asset_id($conn, $asset_id) && $amount_raw !== '' && is_numeric($amount_raw)) {
+                $amount_raw = (string)rl_sats_to_btc_float($amount_raw);
+            }
+
             $value_at_receipt = ($value_at_receipt_raw !== '' && is_numeric($value_at_receipt_raw))
                 ? (float)$value_at_receipt_raw
                 : null;
@@ -554,6 +561,61 @@ $amountVal = ($amountVal === null || $amountVal === '' || (float)$amountVal == 0
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    const btcAssetIds = <?= json_encode(array_values(array_map('intval', array_column(array_filter($assets, 'rl_is_btc_asset_row'), 'id')))) ?>;
+
+    function isBtcAsset(value) {
+        return btcAssetIds.indexOf(parseInt(value || '0', 10)) !== -1;
+    }
+    function trimNumeric(value) {
+        return String(value).replace(/\\.0+$/, '').replace(/(\\.\\d*?)0+$/, '$1');
+    }
+    function btcToSatsString(value) {
+        if (value === '' || isNaN(Number(value))) return value;
+        return String(Math.round(Number(value) * 100000000));
+    }
+    function satsToBtcString(value) {
+        if (value === '' || isNaN(Number(value))) return value;
+        return trimNumeric((Number(value) / 100000000).toFixed(8));
+    }
+    function convertRowAmountForSats(raw, toSats) {
+        if (raw === '' || isNaN(Number(raw))) return raw;
+        return toSats ? btcToSatsString(raw) : satsToBtcString(raw);
+    }
+    document.querySelectorAll('.js-template-sats-row').forEach(function (row) {
+        const idx = row.getAttribute('data-row-index');
+        const checkbox = row.querySelector('input[type="checkbox"]');
+        const tr = row.closest('tr');
+        const amountEl = tr ? tr.querySelector('input[name="amount[]"]') : null;
+        const assetEl = tr ? tr.querySelector('select[name="asset_id[]"], input[name="asset_id[]"]') : null;
+
+        function currentAssetId() {
+            if (assetEl) return assetEl.value;
+            return row.getAttribute('data-default-asset-id') || '0';
+        }
+
+        function refresh() {
+            const show = isBtcAsset(currentAssetId());
+            row.style.display = show ? '' : 'none';
+            if (!show && checkbox.checked && amountEl) {
+                amountEl.value = convertRowAmountForSats(amountEl.value, false);
+                checkbox.checked = false;
+            } else if (show && row.dataset.satsDefault === '1' && !row.dataset.satsApplied && amountEl && amountEl.value !== '') {
+                amountEl.value = convertRowAmountForSats(amountEl.value, true);
+                checkbox.checked = true;
+                row.dataset.satsApplied = '1';
+            }
+        }
+
+        if (assetEl) assetEl.addEventListener('change', refresh);
+        if (checkbox && amountEl) {
+            checkbox.addEventListener('change', function () {
+                amountEl.value = convertRowAmountForSats(amountEl.value, checkbox.checked);
+            });
+        }
+        refresh();
+    });
+
+    const templateForm = document.querySelector('form method="post"');
     document.querySelectorAll('.js-template-price-lookup').forEach(function (button) {
         button.addEventListener('click', async function () {
             const row = button.closest('tr');
@@ -571,7 +633,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
             const payload = {
                 asset_id: assetEl.value,
-                amount: amountEl.value,
+                amount: ((row.querySelector('input[name^="use_sats["]') && row.querySelector('input[name^="use_sats["]').checked) ? convertRowAmountForSats(amountEl.value, false) : amountEl.value),
                 date: dateEl.value,
                 time: timeEl.value
             };
@@ -609,4 +671,17 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 });
+
+    const saveForm = document.querySelector('form[method="post"]');
+    if (saveForm) {
+        saveForm.addEventListener('submit', function () {
+            document.querySelectorAll('.js-template-sats-row input[type="checkbox"]:checked').forEach(function (checkbox) {
+                const tr = checkbox.closest('tr');
+                const amountEl = tr ? tr.querySelector('input[name="amount[]"]') : null;
+                if (amountEl) {
+                    amountEl.value = convertRowAmountForSats(amountEl.value, false);
+                }
+            });
+        });
+    }
 </script>

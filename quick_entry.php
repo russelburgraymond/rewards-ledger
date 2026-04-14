@@ -38,6 +38,7 @@ $res = $conn->query("
         qa.show_from_account,
         qa.show_to_account,
 		qa.is_multi_add,
+        qa.use_sats,
         ap.app_name,
         m.miner_name,
         a.asset_name,
@@ -83,6 +84,25 @@ if ($res) while ($row = $res->fetch_assoc()) $miners[] = $row;
 
 $res = $conn->query("SELECT id, asset_name, asset_symbol FROM assets WHERE is_active = 1 ORDER BY asset_name ASC");
 if ($res) while ($row = $res->fetch_assoc()) $assets[] = $row;
+
+$btc_asset_id = 0;
+foreach ($assets as $asset_row) {
+    $symbol = strtoupper(trim((string)($asset_row['asset_symbol'] ?? '')));
+    $name = strtoupper(trim((string)($asset_row['asset_name'] ?? '')));
+    if ($symbol === 'BTC' || $name === 'BITCOIN' || $name === 'BTC') {
+        $btc_asset_id = (int)$asset_row['id'];
+        break;
+    }
+}
+
+function rl_entry_uses_sats($asset_id, $use_sats, $btc_asset_id) {
+    return (int)$btc_asset_id > 0 && (int)$asset_id === (int)$btc_asset_id && (int)$use_sats === 1;
+}
+
+function rl_sats_to_btc_string($value) {
+    if ($value === null || $value === '') return '';
+    return number_format(((float)$value) / 100000000, 8, '.', '');
+}
 
 $res = $conn->query("SELECT id, app_id, category_name, behavior_type FROM categories WHERE is_active = 1 ORDER BY app_id ASC, sort_order ASC, category_name ASC");
 if ($res) while ($row = $res->fetch_assoc()) $categories[] = $row;
@@ -130,6 +150,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     $received_time = trim($_POST['received_time'] ?? '');
     $value_at_receipt_raw = trim($_POST['value_at_receipt'] ?? '');
     $value_at_receipt_lines_raw = trim($_POST['value_at_receipt_lines'] ?? '');
+    $posted_use_sats = isset($_POST['use_sats']) ? 1 : 0;
 
     $quick_add = null;
     if ($quick_add_key !== 'generic') {
@@ -161,6 +182,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             $notes = trim($_POST['notes'] ?? '');
             $show_received_time = 1;
             $show_value_at_receipt = 1;
+            $use_sats = $posted_use_sats;
         } else {
             $app_id = (int)($quick_add['app_id'] ?? 0);
             $miner_id = ((int)$quick_add['show_miner'] === 1)
@@ -203,6 +225,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
             $show_received_time = (int)($quick_add['show_received_time'] ?? 0);
             $show_value_at_receipt = (int)($quick_add['show_value_at_receipt'] ?? 0);
+            $use_sats = ((int)($quick_add['use_sats'] ?? 0) === 1) ? 1 : $posted_use_sats;
         }
 
         if ($quick_add_key === 'generic' && $app_id <= 0) {
@@ -239,7 +262,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                             break;
                         }
 
-                        $amounts_to_save[] = (float)$line;
+                        if (rl_entry_uses_sats($asset_id, $use_sats, $btc_asset_id)) {
+                            $amounts_to_save[] = (float)rl_sats_to_btc_string($line);
+                        } else {
+                            $amounts_to_save[] = (float)$line;
+                        }
 
                         $value_line = trim((string)($value_lines[$idx] ?? ''));
                         if ($show_value_at_receipt === 1 && $value_line !== '') {
@@ -261,7 +288,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                 if ($amount_raw !== '' && !is_numeric($amount_raw)) {
                     $error = "Please enter a valid amount.";
                 } else {
-                    $amounts_to_save[] = ($amount_raw === '') ? 0 : (float)$amount_raw;
+                    if ($amount_raw === '') {
+                        $amounts_to_save[] = 0;
+                    } elseif (rl_entry_uses_sats($asset_id, $use_sats, $btc_asset_id)) {
+                        $amounts_to_save[] = (float)rl_sats_to_btc_string($amount_raw);
+                    } else {
+                        $amounts_to_save[] = (float)$amount_raw;
+                    }
                     $values_to_save[] = $value_at_receipt;
                 }
             }
@@ -474,6 +507,14 @@ if ($res) {
                             </select>
                         </div>
 
+                        <div class="form-row js-sats-toggle-row" data-btc-asset-id="<?= (int)$btc_asset_id ?>" data-default-checked="1" style="display:none;">
+                            <label>
+                                <input type="checkbox" id="use_sats" name="use_sats" value="1" <?= isset($_POST['use_sats']) ? 'checked' : '' ?>>
+                                Sats
+                            </label>
+                            <div class="subtext">When BTC is selected, enter sats instead of full BTC.</div>
+                        </div>
+
                         <div class="form-row">
                             <label for="category_id">Category</label>
                             <select id="category_id" name="category_id" required>
@@ -524,7 +565,7 @@ if ($res) {
 
                         <div class="form-row">
                             <label for="amount_lines">Amount <span style="font-weight:normal;">(one per line)</span></label>
-                            <textarea id="amount_lines" name="amount_lines" rows="6" placeholder="0.00012345&#10;0.00006789&#10;0.00025000"><?= h($_POST['amount_lines'] ?? ((string)($quick_add['amount'] ?? ''))) ?></textarea>
+                            <textarea id="amount_lines" name="amount_lines" rows="6" placeholder="12345&#10;789&#10;25000"><?= h($_POST['amount_lines'] ?? ((string)($quick_add['amount'] ?? ''))) ?></textarea>
                             <div class="batch-note" style="margin-top:6px;">
                                 <strong>Batch Entry:</strong> If you enter more than one amount here, they will be saved together as one batch. Later changes to shared fields like date or app will affect the whole batch.
                             </div>
@@ -575,6 +616,14 @@ if ($res) {
                                     </option>
                                 <?php endforeach; ?>
                             </select>
+                        </div>
+
+                        <div class="form-row js-sats-toggle-row" data-btc-asset-id="<?= (int)$btc_asset_id ?>" data-default-checked="<?= !empty($quick_add['use_sats']) ? '1' : '0' ?>" style="display:none;">
+                            <label>
+                                <input type="checkbox" id="use_sats" name="use_sats" value="1" <?= (!isset($_POST['use_sats']) && !empty($quick_add['use_sats'])) || isset($_POST['use_sats']) ? 'checked' : '' ?>>
+                                Sats
+                            </label>
+                            <div class="subtext">When BTC is selected, enter sats instead of full BTC.</div>
                         </div>
                     <?php endif; ?>
 
@@ -782,6 +831,47 @@ document.addEventListener("DOMContentLoaded", function () {
         filterGenericCategories();
     }
 
+
+    const formEl = document.querySelector('form[method="post"]');
+    const satsRow = formEl ? formEl.querySelector('.js-sats-toggle-row') : null;
+    const assetInput = formEl ? formEl.querySelector('select[name="asset_id"], input[name="asset_id"]') : null;
+    const satsCheckbox = satsRow ? satsRow.querySelector('input[name="use_sats"]') : null;
+    const amountInput = formEl ? formEl.querySelector('input[name="amount"]') : null;
+    const amountLinesInput = formEl ? formEl.querySelector('textarea[name="amount_lines"]') : null;
+
+    function setAmountPlaceholder() {
+        if (amountInput) {
+            amountInput.placeholder = (satsCheckbox && satsCheckbox.checked) ? '12345' : '0.000000';
+        }
+        if (amountLinesInput) {
+            amountLinesInput.placeholder = (satsCheckbox && satsCheckbox.checked)
+                ? '12345\n789\n25000'
+                : '0.00012345\n0.00006789\n0.00025000';
+        }
+    }
+
+    function syncSatsUi(forceDefault) {
+        if (!satsRow || !assetInput || !satsCheckbox) return;
+        const btcAssetId = String(satsRow.getAttribute('data-btc-asset-id') || '0');
+        const isBtc = btcAssetId !== '0' && String(assetInput.value || '0') === btcAssetId;
+        if (isBtc) {
+            satsRow.style.display = '';
+            if (forceDefault) {
+                satsCheckbox.checked = String(satsRow.getAttribute('data-default-checked') || '0') === '1';
+            }
+        } else {
+            satsRow.style.display = 'none';
+            satsCheckbox.checked = false;
+        }
+        setAmountPlaceholder();
+    }
+
+    if (assetInput && satsCheckbox && satsRow) {
+        assetInput.addEventListener('change', function () { syncSatsUi(true); });
+        satsCheckbox.addEventListener('change', setAmountPlaceholder);
+        syncSatsUi(true);
+    }
+
     const statusEl = document.getElementById('value_lookup_status');
 
     function setLookupStatus(message, isError) {
@@ -814,9 +904,10 @@ document.addEventListener("DOMContentLoaded", function () {
                 return;
             }
 
+            const satsEl = formEl ? formEl.querySelector('input[name="use_sats"]') : null;
             const payload = {
                 asset_id: assetEl.value,
-                amount: amountEl.value,
+                amount: (satsEl && satsEl.checked) ? (parseFloat(amountEl.value || '0') / 100000000).toFixed(8) : amountEl.value,
                 date: dateEl.value,
                 time: timeEl.value
             };
@@ -887,9 +978,11 @@ document.addEventListener("DOMContentLoaded", function () {
                         continue;
                     }
 
+                    const satsEl = formEl ? formEl.querySelector('input[name="use_sats"]') : null;
+                    const lookupAmount = (satsEl && satsEl.checked) ? (parseFloat(amount || '0') / 100000000).toFixed(8) : amount;
                     const { response, data } = await fetchLookupValue({
                         asset_id: assetId,
-                        amount,
+                        amount: lookupAmount,
                         date,
                         time
                     });

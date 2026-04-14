@@ -100,6 +100,16 @@ $res = $conn->query("
 ");
 if ($res) while ($row = $res->fetch_assoc()) $assets[] = $row;
 
+$btc_asset_id = 0;
+foreach ($assets as $asset_row) {
+    $symbol = strtoupper(trim((string)($asset_row['asset_symbol'] ?? '')));
+    $name = strtoupper(trim((string)($asset_row['asset_name'] ?? '')));
+    if ($symbol === 'BTC' || $name === 'BITCOIN' || $name === 'BTC') {
+        $btc_asset_id = (int)$asset_row['id'];
+        break;
+    }
+}
+
 $res = $conn->query("
     SELECT id, app_id, category_name, behavior_type
     FROM categories
@@ -158,18 +168,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     $show_to_account = isset($_POST['show_to_account']) ? 1 : 0;
 
     $is_multi_add = isset($_POST['is_multi_add']) ? 1 : 0;
+    $use_sats = isset($_POST['use_sats']) ? 1 : 0;
     $sort_order = (int)($_POST['sort_order'] ?? 0);
-
-    if ($id <= 0 && $sort_order <= 0) {
-        $resSort = $conn->query("SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_sort_order FROM quick_add_items");
-        if ($resSort) {
-            $rowSort = $resSort->fetch_assoc();
-            $sort_order = (int)($rowSort['next_sort_order'] ?? 1);
-            $resSort->free();
-        } else {
-            $sort_order = 1;
-        }
-    }
     $is_active = isset($_POST['is_active']) ? 1 : 0;
 
     if ($app_id <= 0) {
@@ -239,6 +239,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                             show_from_account = ?,
                             show_to_account = ?,
                             is_multi_add = ?,
+                            use_sats = ?,
                             sort_order = ?,
                             is_active = ?
                         WHERE id = ?
@@ -246,7 +247,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
                     if ($stmt) {
                         $stmt->bind_param(
-                            "isiiiiiidsiiiiiiiiiiiiii",
+                            "isiiiiiidsiiiiiiiiiiiiiii",
                             $app_id,
                             $quick_add_name,
                             $miner_id,
@@ -268,6 +269,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                             $show_from_account,
                             $show_to_account,
                             $is_multi_add,
+                            $use_sats,
                             $sort_order,
                             $is_active,
                             $id
@@ -304,15 +306,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                             show_from_account,
                             show_to_account,
                             is_multi_add,
+                            use_sats,
                             sort_order,
                             is_active
                         )
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     ");
 
                     if ($stmt) {
                         $stmt->bind_param(
-                            "isiiiiiidsiiiiiiiiiiiii",
+                            "isiiiiiidsiiiiiiiiiiiiii",
                             $app_id,
                             $quick_add_name,
                             $miner_id,
@@ -334,6 +337,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                             $show_from_account,
                             $show_to_account,
                             $is_multi_add,
+                            $use_sats,
                             $sort_order,
                             $is_active
                         );
@@ -377,6 +381,7 @@ $edit = [
     'show_from_account' => 0,
     'show_to_account' => 0,
     'is_multi_add' => 0,
+    'use_sats' => 0,
     'sort_order' => 0,
     'is_active' => 1,
 ];
@@ -409,6 +414,7 @@ if (isset($_GET['edit'])) {
                 show_from_account,
                 show_to_account,
                 is_multi_add,
+                use_sats,
                 sort_order,
                 is_active
             FROM quick_add_items
@@ -624,6 +630,14 @@ $show_quick_add_form = ((int)$edit['id'] > 0) || (($_GET['action'] ?? '') === 'c
                     <input type="text" id="amount" name="amount" value="<?= h((string)$edit['amount']) ?>">
                 </div>
 
+                <div class="form-row js-quick-add-sats-row" data-btc-asset-id="<?= (int)$btc_asset_id ?>" style="display:none;">
+                    <label>
+                        <input type="checkbox" id="use_sats" name="use_sats" value="1" <?= !empty($edit['use_sats']) ? 'checked' : '' ?>>
+                        Sats
+                    </label>
+                    <div class="subtext">When BTC is selected, default this Quick Entry item to sats entry mode.</div>
+                </div>
+
                 <div class="form-row">
                     <label for="notes">Notes</label>
                     <textarea id="notes" name="notes" rows="3"><?= h($edit['notes']) ?></textarea>
@@ -776,7 +790,7 @@ $show_quick_add_form = ((int)$edit['id'] > 0) || (($_GET['action'] ?? '') === 'c
                                         <span class="badge badge-gray">No</span>
                                     <?php endif; ?>
                                 </td>
-                                <td class="sort-order"><?= (int)$qa['sort_order'] ?></td>
+                                <td><?= (int)$qa['sort_order'] ?></td>
                                 <td>
                                     <?php if ((int)$qa['is_active'] === 1): ?>
                                         <span class="badge badge-green">Active</span>
@@ -895,5 +909,18 @@ document.addEventListener("DOMContentLoaded", function () {
             });
         }
     });
+});
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var assetSelect = document.getElementById('asset_id');
+    var satsRow = document.querySelector('.js-quick-add-sats-row');
+    if (!assetSelect || !satsRow) return;
+    var btcAssetId = String(satsRow.getAttribute('data-btc-asset-id') || '0');
+    function syncQuickAddSatsRow() {
+        satsRow.style.display = (btcAssetId !== '0' && String(assetSelect.value) === btcAssetId) ? '' : 'none';
+    }
+    assetSelect.addEventListener('change', syncQuickAddSatsRow);
+    syncQuickAddSatsRow();
 });
 </script>

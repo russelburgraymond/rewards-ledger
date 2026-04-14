@@ -102,22 +102,14 @@ if ($res) {
 
 if ($template_id <= 0) {
     $default_app_id = !empty($apps) ? (int)$apps[0]['id'] : 0;
-    $template_sort_order = 1;
-
-    $resSort = $conn->query("SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_sort_order FROM templates");
-    if ($resSort) {
-        $rowSort = $resSort->fetch_assoc();
-        $template_sort_order = (int)($rowSort['next_sort_order'] ?? 1);
-        $resSort->free();
-    }
 
     $stmt = $conn->prepare("
-        INSERT INTO templates (app_id, template_name, notes, sort_order)
-        VALUES (?, 'New Template', '', ?)
+        INSERT INTO templates (app_id, template_name, notes)
+        VALUES (?, 'New Template', '')
     ");
 
     if ($stmt) {
-        $stmt->bind_param("ii", $default_app_id, $template_sort_order);
+        $stmt->bind_param("i", $default_app_id);
         $stmt->execute();
         $template_id = (int)$stmt->insert_id;
         $stmt->close();
@@ -216,6 +208,7 @@ $line_form = [
     'show_value_at_receipt' => 1,
     'show_from_account' => 0,
     'show_to_account' => 0,
+    'use_sats' => 0,
     'show_in_quick_add' => 0,
     'quick_add_name' => '',
     'is_multi_add' => 0,
@@ -280,6 +273,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     $show_value_at_receipt = isset($_POST['show_value_at_receipt']) ? 1 : 0;
     $show_from_account = isset($_POST['show_from_account']) ? 1 : 0;
     $show_to_account = isset($_POST['show_to_account']) ? 1 : 0;
+    $use_sats = isset($_POST['use_sats']) ? 1 : 0;
 
     $show_in_quick_add = isset($_POST['show_in_quick_add']) ? 1 : 0;
     $quick_add_name = trim($_POST['quick_add_name'] ?? '');
@@ -305,6 +299,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         'show_value_at_receipt' => $show_value_at_receipt,
         'show_from_account' => $show_from_account,
         'show_to_account' => $show_to_account,
+        'use_sats' => $use_sats,
         'show_in_quick_add' => $show_in_quick_add,
         'quick_add_name' => $quick_add_name,
         'is_multi_add' => $is_multi_add,
@@ -320,11 +315,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         $error = "Please enter a Quick Add name.";
     } else {
         $amount_decimal = ($amount === '') ? 0 : (float)$amount;
+        if ($use_sats === 1 && rl_is_btc_asset_id($conn, $asset_id)) {
+            $amount_decimal = rl_sats_to_btc_float($amount);
+        }
 
         $old_line = null;
         if ($line_id > 0) {
             $stmtOld = $conn->prepare("
-                SELECT show_in_quick_add, quick_add_name, is_multi_add
+                SELECT show_in_quick_add, quick_add_name, is_multi_add, use_sats
                 FROM template_items
                 WHERE id = ? AND template_id = ?
                 LIMIT 1
@@ -360,6 +358,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                     show_value_at_receipt = ?,
                     show_from_account = ?,
                     show_to_account = ?,
+                    use_sats = ?,
                     show_in_quick_add = ?,
                     quick_add_name = ?,
                     is_multi_add = ?
@@ -370,7 +369,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                 $error = "Could not update template line: " . $conn->error;
             } else {
                 $stmt->bind_param(
-                    "iiiiiidsiiiiiiiiiiisiii",
+                    "iiiiiidsiiiiiiiiiiiisiii",
                     $miner_id,
                     $asset_id,
                     $category_id,
@@ -389,6 +388,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                     $show_value_at_receipt,
                     $show_from_account,
                     $show_to_account,
+                    $use_sats,
                     $show_in_quick_add,
                     $quick_add_name,
                     $is_multi_add,
@@ -444,25 +444,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                                 " : "") . "
                                 show_from_account,
                                 show_to_account,
+                                use_sats,
                                 is_multi_add,
                                 sort_order,
                                 is_active
                             )
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ");
 
                         if ($stmtQa) {
-                            $sort_order = 1;
-                            $resQaSort = $conn->query("SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_sort_order FROM quick_add_items");
-                            if ($resQaSort) {
-                                $rowQaSort = $resQaSort->fetch_assoc();
-                                $sort_order = (int)($rowQaSort['next_sort_order'] ?? 1);
-                                $resQaSort->free();
-                            }
+                            $sort_order = 0;
                             $is_active = 1;
 
                             $stmtQa->bind_param(
-                                "isiiiiiidsiiiiiiiiiiiii",
+                                "isiiiiiidsiiiiiiiiiiiiii",
                                 $template_app_id,
                                 $quick_add_name,
                                 $miner_id,
@@ -483,6 +478,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                                 $show_value_at_receipt,
                                 $show_from_account,
                                 $show_to_account,
+                                $use_sats,
                                 $is_multi_add,
                                 $sort_order,
                                 $is_active
@@ -535,6 +531,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                     show_value_at_receipt,
                     show_from_account,
                     show_to_account,
+                    use_sats,
                     show_in_quick_add,
                     quick_add_name,
                     is_multi_add,
@@ -567,6 +564,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                     $show_value_at_receipt,
                     $show_from_account,
                     $show_to_account,
+                    $use_sats,
                     $show_in_quick_add,
                     $quick_add_name,
                     $is_multi_add,
@@ -601,25 +599,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                                 show_value_at_receipt,
                                 show_from_account,
                                 show_to_account,
+                                use_sats,
                                 is_multi_add,
                                 sort_order,
                                 is_active
                             )
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         ");
 
                         if ($stmtQa) {
-                            $qa_sort_order = 1;
-                            $resQaSort = $conn->query("SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_sort_order FROM quick_add_items");
-                            if ($resQaSort) {
-                                $rowQaSort = $resQaSort->fetch_assoc();
-                                $qa_sort_order = (int)($rowQaSort['next_sort_order'] ?? 1);
-                                $resQaSort->free();
-                            }
+                            $qa_sort_order = 0;
                             $qa_active = 1;
 
                             $stmtQa->bind_param(
-                                "isiiiiiidsiiiiiiiiiiiii",
+                                "isiiiiiidsiiiiiiiiiiiiii",
                                 $template_app_id,
                                 $quick_add_name,
                                 $miner_id,
@@ -773,6 +766,8 @@ $stmt = $conn->prepare("
         " . ($ti_has_received_time ? "ti.show_received_time" : "1") . " AS show_received_time,
         " . ($ti_has_value_at_receipt ? "ti.show_value_at_receipt" : "1") . " AS show_value_at_receipt,
         ti.show_from_account,
+        ti.use_sats,
+
         ti.show_to_account,
         ti.show_in_quick_add,
         ti.quick_add_name,
@@ -955,6 +950,14 @@ if ($stmt) {
                     </span>
                 </label>
                 <input type="text" id="amount" name="amount" value="<?= h((string)$line_form['amount']) ?>" placeholder="Optional">
+            </div>
+
+            <div class="form-row js-sats-toggle-row" data-sats-default="<?= !empty($line_form['use_sats']) ? '1' : '0' ?>" style="display:none;">
+                <label>
+                    <input type="checkbox" name="use_sats" value="1" <?= !empty($line_form['use_sats']) ? 'checked' : '' ?>>
+                    Sats
+                </label>
+                <div class="subtext">When BTC is selected, check this to enter the amount in sats instead of full BTC.</div>
             </div>
 
             <div class="form-row">
@@ -1142,5 +1145,50 @@ document.addEventListener("DOMContentLoaded", function () {
             });
         }
     });
+});
+</script>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const btcAssetIds = <?= json_encode(array_values(array_map('intval', array_column(array_filter($assets, 'rl_is_btc_asset_row'), 'id')))) ?>;
+    const assetEl = document.getElementById('asset_id');
+    const amountEl = document.getElementById('amount');
+    const satsRow = document.querySelector('.js-sats-toggle-row');
+    const satsCheckbox = satsRow ? satsRow.querySelector('input[name="use_sats"]') : null;
+
+    function isBtcAsset(value) {
+        return btcAssetIds.indexOf(parseInt(value || '0', 10)) !== -1;
+    }
+    function trimNumeric(value) {
+        return String(value).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1');
+    }
+    function btcToSats(value) {
+        if (value === '' || isNaN(Number(value))) return value;
+        return String(Math.round(Number(value) * 100000000));
+    }
+    function satsToBtc(value) {
+        if (value === '' || isNaN(Number(value))) return value;
+        return trimNumeric((Number(value) / 100000000).toFixed(8));
+    }
+    function refreshSatsVisibility() {
+        if (!assetEl || !satsRow || !satsCheckbox || !amountEl) return;
+        const show = isBtcAsset(assetEl.value);
+        satsRow.style.display = show ? '' : 'none';
+        if (!show && satsCheckbox.checked) {
+            amountEl.value = satsToBtc(amountEl.value);
+            satsCheckbox.checked = false;
+        } else if (show && satsRow.dataset.satsDefault === '1' && !satsRow.dataset.satsApplied) {
+            if (amountEl.value !== '') amountEl.value = btcToSats(amountEl.value);
+            satsCheckbox.checked = true;
+            satsRow.dataset.satsApplied = '1';
+        }
+    }
+    if (assetEl) assetEl.addEventListener('change', refreshSatsVisibility);
+    if (satsCheckbox && amountEl) {
+        satsCheckbox.addEventListener('change', function () {
+            amountEl.value = satsCheckbox.checked ? btcToSats(amountEl.value) : satsToBtc(amountEl.value);
+        });
+    }
+    refreshSatsVisibility();
 });
 </script>

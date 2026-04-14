@@ -150,6 +150,8 @@ $edit = [
     'from_account_id' => 0,
     'to_account_id' => 0,
     'amount' => '0',
+    'received_time' => '',
+    'value_at_receipt' => '',
     'notes' => '',
 ];
 
@@ -169,6 +171,8 @@ if (isset($_GET['edit'])) {
 				bi.from_account_id,
 				bi.to_account_id,
 				bi.amount,
+				bi.received_time,
+				bi.value_at_receipt,
 				bi.notes,
 				(
 					SELECT COUNT(*)
@@ -213,6 +217,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     $from_account_id = (int)($_POST['from_account_id'] ?? 0);
     $to_account_id = (int)($_POST['to_account_id'] ?? 0);
     $amount_raw = trim($_POST['amount'] ?? '0');
+    $received_time_raw = trim($_POST['received_time'] ?? '');
+    $value_at_receipt_raw = trim($_POST['value_at_receipt'] ?? '');
+    $use_sats = isset($_POST['use_sats']) ? 1 : 0;
     $notes = trim($_POST['notes'] ?? '');
 
     $edit = [
@@ -226,6 +233,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         'from_account_id' => $from_account_id,
         'to_account_id' => $to_account_id,
         'amount' => $amount_raw,
+        'received_time' => $received_time_raw,
+        'value_at_receipt' => $value_at_receipt_raw,
         'notes' => $notes,
     ];
 	
@@ -243,8 +252,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         $error = "Asset is required.";
     } elseif ($amount_raw === '' || !is_numeric($amount_raw)) {
         $error = "Please enter a valid amount.";
+    } elseif ($received_time_raw !== '' && !preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $received_time_raw)) {
+        $error = "Please enter a valid received time.";
+    } elseif ($value_at_receipt_raw !== '' && !is_numeric($value_at_receipt_raw)) {
+        $error = "Please enter a valid value at receipt.";
     } else {
+        if ($use_sats === 1 && rl_is_btc_asset_id($conn, $asset_id)) {
+            $amount_raw = (string)rl_sats_to_btc_float($amount_raw);
+        }
         $amount = (float)$amount_raw;
+        $received_time = ($received_time_raw !== '') ? $received_time_raw : null;
+        $value_at_receipt = ($value_at_receipt_raw !== '') ? (float)$value_at_receipt_raw : null;
 
         $stmt = $conn->prepare("
             UPDATE batches b
@@ -272,23 +290,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                     from_account_id = ?,
                     to_account_id = ?,
                     amount = ?,
+                    received_time = ?,
+                    value_at_receipt = ?,
                     notes = ?
                 WHERE id = ?
             ");
 
             if ($stmt) {
-                $stmt->bind_param(
-                    "iiiiiidsi",
-                    $miner_id,
-                    $asset_id,
-                    $category_id,
-                    $referral_id,
-                    $from_account_id,
-                    $to_account_id,
-                    $amount,
-                    $notes,
-                    $id
-                );
+				$stmt->bind_param(
+					"iiiiiidsssi",
+					$miner_id,
+					$asset_id,
+					$category_id,
+					$referral_id,
+					$from_account_id,
+					$to_account_id,
+					$amount,
+					$received_time,
+					$value_at_receipt,
+					$notes,
+					$id
+				);
                 $stmt->execute();
                 $stmt->close();
 
@@ -852,6 +874,28 @@ $base_filter_query = [
                     <label for="amount">Amount</label>
                     <input type="text" id="amount" name="amount" value="<?= h((string)$edit['amount']) ?>" required>
                 </div>
+
+                <div class="form-row js-ledger-sats-row" style="display:none;">
+                    <label>
+                        <input type="checkbox" name="use_sats" value="1" <?= !empty($_POST['use_sats']) ? 'checked' : '' ?>>
+                        Sats
+                    </label>
+                    <div class="subtext">When BTC is selected, check this to enter sats instead of full BTC.</div>
+                </div>
+
+                <div class="form-row">
+                    <label for="received_time">Time Received</label>
+                    <input type="time" id="received_time" name="received_time" value="<?= h((string)($edit['received_time'] ?? '')) ?>">
+                </div>
+
+                <div class="form-row">
+                    <label for="value_at_receipt">Value at Time Received</label>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <input type="text" id="value_at_receipt" name="value_at_receipt" value="<?= h((string)($edit['value_at_receipt'] ?? '')) ?>" placeholder="0.00" style="flex:1;">
+                        <button type="button" class="btn btn-secondary js-price-lookup-single">Look up value at time of receipt</button>
+                    </div>
+                    <div class="subtext" id="value_lookup_status" style="margin-top:6px;"></div>
+                </div>
             </div>
 
             <div class="grid-3">
@@ -940,6 +984,88 @@ $base_filter_query = [
         </form>
     </div>
 <?php endif; ?>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const btcAssetIds = <?= json_encode(array_values(array_map('intval', array_column(array_filter($assets, 'rl_is_btc_asset_row'), 'id')))) ?>;
+    const assetEl = document.getElementById('asset_id');
+    const amountEl = document.getElementById('amount');
+    const satsRow = document.querySelector('.js-ledger-sats-row');
+    const satsCheckbox = satsRow ? satsRow.querySelector('input[name="use_sats"]') : null;
+    const statusEl = document.getElementById('value_lookup_status');
+    const lookupBtn = document.querySelector('.js-price-lookup-single');
+
+    function isBtcAsset(value) { return btcAssetIds.indexOf(parseInt(value || '0', 10)) !== -1; }
+    function trimNumeric(value) { return String(value).replace(/\.0+$/, '').replace(/(\.\d*?)0+$/, '$1'); }
+    function btcToSatsString(value) { if (value === '' || isNaN(Number(value))) return value; return String(Math.round(Number(value) * 100000000)); }
+    function satsToBtcString(value) { if (value === '' || isNaN(Number(value))) return value; return trimNumeric((Number(value) / 100000000).toFixed(8)); }
+    function setLookupStatus(message, isError) {
+        if (!statusEl) return;
+        statusEl.textContent = message || '';
+        statusEl.style.color = isError ? '#d9534f' : '';
+    }
+    function refreshSats() {
+        if (!satsRow || !satsCheckbox || !amountEl || !assetEl) return;
+        const show = isBtcAsset(assetEl.value);
+        satsRow.style.display = show ? '' : 'none';
+        if (!show && satsCheckbox.checked) {
+            amountEl.value = satsToBtcString(amountEl.value);
+            satsCheckbox.checked = false;
+        }
+    }
+    if (assetEl) assetEl.addEventListener('change', refreshSats);
+    if (satsCheckbox && amountEl) {
+        satsCheckbox.addEventListener('change', function () {
+            amountEl.value = satsCheckbox.checked ? btcToSatsString(amountEl.value) : satsToBtcString(amountEl.value);
+        });
+        const form = satsCheckbox.closest('form');
+        if (form) {
+            form.addEventListener('submit', function () {
+                if (satsCheckbox.checked) {
+                    amountEl.value = satsToBtcString(amountEl.value);
+                }
+            });
+        }
+    }
+    refreshSats();
+
+    if (lookupBtn) {
+        lookupBtn.addEventListener('click', async function () {
+            const timeEl = document.getElementById('received_time');
+            const valueEl = document.getElementById('value_at_receipt');
+            const dateEl = document.getElementById('batch_date');
+            if (!assetEl || !amountEl || !timeEl || !valueEl || !dateEl) return;
+            const payload = {
+                asset_id: assetEl.value,
+                amount: (satsCheckbox && satsCheckbox.checked) ? satsToBtcString(amountEl.value) : amountEl.value,
+                date: dateEl.value,
+                time: timeEl.value
+            };
+            if (!payload.asset_id || payload.asset_id === '0' || !payload.amount || !payload.date || !payload.time) {
+                setLookupStatus('Enter asset, amount, date, and time first.', true);
+                return;
+            }
+            setLookupStatus('Looking up price...', false);
+            try {
+                const response = await fetch('ajax/get_price.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+                if (!response.ok || !data.success) {
+                    setLookupStatus((data && data.error) ? data.error : 'Price lookup failed.', true);
+                    return;
+                }
+                valueEl.value = data.total_value_formatted || data.total_value || '';
+                setLookupStatus(data.message || 'Price loaded.', false);
+            } catch (error) {
+                setLookupStatus('Price lookup failed.', true);
+            }
+        });
+    }
+});
+</script>
 
 <div class="card mt-20">
     <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
