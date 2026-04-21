@@ -1,5 +1,9 @@
 # Rewards Ledger
 
+#Screenshots
+
+[Ledger](Screenshots/ledger.png)
+
 A PHP/MySQL ledger-style tracker for GoMining activity.
 
 ## Requirements
