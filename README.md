@@ -3,24 +3,24 @@
 ## Screenshots
 
 ### Ledger
-![Ledger](assets/images/ledger.png)
+![Ledger](Screenshots/ledger.png)
 
 ### Dashboard
-![Dashboard](assets/images/Screenshot2026-04-21072722.png)
+![Dashboard](Screenshots/Screenshot2026-04-21072722.png)
 
 ### Graphs
-![Graphs](assets/images/Screenshot2026-04-21072734.png)
+![Graphs](Screenshots/Screenshot2026-04-21072734.png)
 
 ### More Graphs
-![More Graphs](assets/images/Screenshot2026-04-21072739.png)
+![More Graphs](Screenshots/Screenshot2026-04-21072739.png)
 
 ### Templates Selection
-![Templates Selection](assets/images/Screenshot2026-04-21072801.png)
+![Templates Selection](Screenshots/Screenshot2026-04-21072801.png)
 
 ### Templates Entry
-![Templates Entry](assets/images/Screenshot2026-04-21072811.png)
+![Templates Entry](Screenshots/Screenshot2026-04-21072811.png)
 
-![Templates Entry 2](assets/images/Screenshot2026-04-21072834.png)
+![Templates Entry 2](Screenshots/Screenshot2026-04-21072834.png)
 
 
 A PHP/MySQL ledger-style tracker for GoMining activity.
