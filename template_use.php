@@ -261,6 +261,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                 $amount = rl_sats_to_btc_float($amount_raw);
             }
 
+            if (abs((float)$amount) < 0.0000000000000001) {
+                continue;
+            }
+
             $received_time = ($received_time_raw !== '' && preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $received_time_raw))
                 ? $received_time_raw
                 : null;

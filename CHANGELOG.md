@@ -2,6 +2,12 @@
 
 All notable changes to this application are documented here.
 
+## 2.3.1
+- Template Use now skips zero-amount line items when saving
+-- Prevents empty/zero entries from cluttering batch_items
+
+---
+
 ## 2.3.0
 - Added per-line Date field option to Templates
 - Fixed template line insert errors

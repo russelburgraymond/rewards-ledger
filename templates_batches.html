@@ -1,0 +1,54 @@
+<div class="wiki-prose">
+  <div class="wiki-hero">
+    <div>
+      <div class="wiki-eyebrow">RewardLedger Wiki</div>
+      <h1>Templates & Batch-Style Entry</h1>
+      <p class="wiki-intro">Templates let you save reusable entry layouts. Using a template creates a consolidated form that can submit multiple related lines together.</p>
+    </div>
+    <div class="wiki-hero-actions">
+      <button type="button" class="wiki-btn wiki-expand-all">Expand all</button>
+      <button type="button" class="wiki-btn wiki-collapse-all">Collapse all</button>
+    </div>
+  </div>
+  
+<details class="wiki-section" open>
+  <summary>What a template saves</summary>
+  <div>
+    <ul>
+      <li>Apps</li>
+      <li>Categories</li>
+      <li>Assets</li>
+      <li>Accounts</li>
+      <li>Optional field visibility settings</li>
+      <li>Optional default values</li>
+    </ul>
+
+<p><strong>Note:</strong> In <em>Use Template</em>, any line left at an amount of <code>0</code> is skipped and is not saved to the database.</p>
+  </div>
+</details>
+
+<details class="wiki-section" open>
+  <summary>Using a template</summary>
+  <div class="wiki-callout info"><strong>BTC Sats option:</strong> Template lines can now store a default <strong>Sats</strong> preference. When a BTC line uses that option, the entry form opens with the sats checkbox ready so users can type whole sats instead of decimal BTC.</div>
+  <div class="wiki-callout info"><strong>Per-line date option:</strong> Template lines can now expose their own <strong>Date</strong> field. When enabled, the line starts with the main template date filled in, but you can change that row to a different day before saving. When disabled, that line keeps using the main template date automatically.</div>
+
+  <div>
+    <p>When you click <strong>Use</strong> on a template, RewardLedger opens a single form containing the template lines. The date usually defaults to the current date, and any stored defaults can prefill the fields.</p>
+  </div>
+</details>
+
+<details class="wiki-section">
+  <summary>Multi-add inside templates</summary>
+  <div>
+    <p>Some template lines support one amount per line in a textarea. This is useful when you want repeated entries using the same setup.</p>
+  </div>
+</details>
+
+<details class="wiki-section">
+  <summary>Date warning for batch-generated entries</summary>
+  <div>
+    <p>If several entries were generated together from the same batch-style action, changing the date on one line may update the batch date for the related entries as well. Pay attention to any warning shown on the form.</p>
+  </div>
+</details>
+
+</div>
