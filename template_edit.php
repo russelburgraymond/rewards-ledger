@@ -10,6 +10,7 @@ $from_context = trim((string)($_GET['from'] ?? $_POST['from'] ?? ''));
 $from_settings_templates = ($from_context === 'settings_templates');
 $back_href = $from_settings_templates ? 'index.php?page=quick_adds' : 'index.php?page=templates';
 
+$ti_has_date = function_exists('rl_column_exists') ? rl_column_exists($conn, 'template_items', 'show_date') : false;
 $ti_has_received_time = function_exists('rl_column_exists') ? rl_column_exists($conn, 'template_items', 'show_received_time') : false;
 $ti_has_value_at_receipt = function_exists('rl_column_exists') ? rl_column_exists($conn, 'template_items', 'show_value_at_receipt') : false;
 
@@ -190,6 +191,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
 $line_form = [
     'id' => 0,
+    'line_label' => '',
+    'description' => '',
     'miner_id' => 0,
     'asset_id' => 0,
     'category_id' => 0,
@@ -204,6 +207,7 @@ $line_form = [
     'show_referral' => 0,
     'show_amount' => 1,
     'show_notes' => 1,
+    'show_date' => 0,
     'show_received_time' => 1,
     'show_value_at_receipt' => 1,
     'show_from_account' => 0,
@@ -254,6 +258,8 @@ if (isset($_GET['edit_line'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_line') {
     $line_id = (int)($_POST['line_id'] ?? 0);
 
+    $line_label = trim((string)($_POST['line_label'] ?? ''));
+    $description = trim((string)($_POST['description'] ?? ''));
     $miner_id = (int)($_POST['miner_id'] ?? 0);
     $asset_id = (int)($_POST['asset_id'] ?? 0);
     $category_id = (int)($_POST['category_id'] ?? 0);
@@ -269,6 +275,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
     $show_referral = isset($_POST['show_referral']) ? 1 : 0;
     $show_amount = isset($_POST['show_amount']) ? 1 : 0;
     $show_notes = isset($_POST['show_notes']) ? 1 : 0;
+    $show_date = isset($_POST['show_date']) ? 1 : 0;
     $show_received_time = isset($_POST['show_received_time']) ? 1 : 0;
     $show_value_at_receipt = isset($_POST['show_value_at_receipt']) ? 1 : 0;
     $show_from_account = isset($_POST['show_from_account']) ? 1 : 0;
@@ -281,6 +288,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
 
     $line_form = [
         'id' => $line_id,
+        'line_label' => $line_label,
+        'description' => $description,
         'miner_id' => $miner_id,
         'asset_id' => $asset_id,
         'category_id' => $category_id,
@@ -295,6 +304,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         'show_referral' => $show_referral,
         'show_amount' => $show_amount,
         'show_notes' => $show_notes,
+        'show_date' => $show_date,
         'show_received_time' => $show_received_time,
         'show_value_at_receipt' => $show_value_at_receipt,
         'show_from_account' => $show_from_account,
@@ -354,6 +364,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                     show_referral = ?,
                     show_amount = ?,
                     show_notes = ?,
+                    show_date = ?,
                     show_received_time = ?,
                     show_value_at_receipt = ?,
                     show_from_account = ?,
@@ -369,7 +380,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                 $error = "Could not update template line: " . $conn->error;
             } else {
                 $stmt->bind_param(
-                    "iiiiiidsiiiiiiiiiiiisiii",
+                    "iiiiiidsiiiiiiiiiiiiisiii",
                     $miner_id,
                     $asset_id,
                     $category_id,
@@ -384,6 +395,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                     $show_referral,
                     $show_amount,
                     $show_notes,
+                    $show_date,
                     $show_received_time,
                     $show_value_at_receipt,
                     $show_from_account,
@@ -510,66 +522,70 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                 $sort_order = (int)($rowCount['c'] ?? 0);
             }
 
-            $stmt = $conn->prepare("
-                INSERT INTO template_items (
-                    template_id,
-                    miner_id,
-                    asset_id,
-                    category_id,
-                    referral_id,
-                    from_account_id,
-                    to_account_id,
-                    amount,
-                    notes,
-                    show_miner,
-                    show_asset,
-                    show_category,
-                    show_referral,
-                    show_amount,
-                    show_notes,
-                    show_received_time,
-                    show_value_at_receipt,
-                    show_from_account,
-                    show_to_account,
-                    use_sats,
-                    show_in_quick_add,
-                    quick_add_name,
-                    is_multi_add,
-                    sort_order
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ");
+$stmt = $conn->prepare("
+INSERT INTO template_items (
+    template_id,
+    line_label,
+    description,
+    miner_id,
+    asset_id,
+    category_id,
+    referral_id,
+    from_account_id,
+    to_account_id,
+    amount,
+    notes,
+    show_miner,
+    show_asset,
+    show_category,
+    show_referral,
+    show_amount,
+    show_notes,
+    show_date,
+    show_received_time,
+    show_value_at_receipt,
+    show_from_account,
+    show_to_account,
+    show_in_quick_add,
+    quick_add_name,
+    is_multi_add,
+    sort_order,
+    use_sats
+) VALUES (
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+)
+");
 
-            if (!$stmt) {
-                $error = "Could not add template line: " . $conn->error;
-            } else {
-                $stmt->bind_param(
-                    "iiiiiiidsiiiiiiiiiiisii",
-                    $template_id,
-                    $miner_id,
-                    $asset_id,
-                    $category_id,
-                    $referral_id,
-                    $from_account_id,
-                    $to_account_id,
-                    $amount_decimal,
-                    $notes,
-                    $show_miner,
-                    $show_asset,
-                    $show_category,
-                    $show_referral,
-                    $show_amount,
-                    $show_notes,
-                    $show_received_time,
-                    $show_value_at_receipt,
-                    $show_from_account,
-                    $show_to_account,
-                    $use_sats,
-                    $show_in_quick_add,
-                    $quick_add_name,
-                    $is_multi_add,
-                    $sort_order
-                );
+$stmt->bind_param(
+    "issiiiiiidsiiiiiiiiiiiisiii",
+    $template_id,
+    $line_label,
+    $description,
+    $miner_id,
+    $asset_id,
+    $category_id,
+    $referral_id,
+    $from_account_id,
+    $to_account_id,
+    $amount_decimal,
+    $notes,
+    $show_miner,
+    $show_asset,
+    $show_category,
+    $show_referral,
+    $show_amount,
+    $show_notes,
+    $show_date,
+    $show_received_time,
+    $show_value_at_receipt,
+    $show_from_account,
+    $show_to_account,
+    $show_in_quick_add,
+    $quick_add_name,
+    $is_multi_add,
+    $sort_order,
+    $use_sats
+);
 
                 if ($stmt->execute()) {
                     $stmt->close();
@@ -612,7 +628,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                             $qa_active = 1;
 
                             $stmtQa->bind_param(
-                                "isiiiiiidsiiiiiiiiiiiiii",
+                                "isiiiiiidsiiiiiiiiiiiiiii",
                                 $template_app_id,
                                 $quick_add_name,
                                 $miner_id,
@@ -633,6 +649,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                                 $show_value_at_receipt,
                                 $show_from_account,
                                 $show_to_account,
+                                $use_sats,
                                 $is_multi_add,
                                 $qa_sort_order,
                                 $qa_active
@@ -658,7 +675,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             }
         }
     }
-}
 
 /* -----------------------------
    HANDLE DELETE TEMPLATE LINE
@@ -974,6 +990,7 @@ if ($stmt) {
                     <label><input type="checkbox" name="show_referral" <?= !empty($line_form['show_referral']) ? 'checked' : '' ?>> Referral</label><br>
                     <label><input type="checkbox" name="show_amount" <?= !empty($line_form['show_amount']) ? 'checked' : '' ?>> Amount</label><br>
                     <label><input type="checkbox" name="show_notes" <?= !empty($line_form['show_notes']) ? 'checked' : '' ?>> Notes</label><br>
+                    <label><input type="checkbox" name="show_date" <?= !empty($line_form['show_date']) ? 'checked' : '' ?>> Date</label><br>
                     <label><input type="checkbox" name="show_received_time" <?= !empty($line_form['show_received_time']) ? 'checked' : '' ?>> Time Received</label><br>
                     <label><input type="checkbox" name="show_value_at_receipt" <?= !empty($line_form['show_value_at_receipt']) ? 'checked' : '' ?>> Value at Receipt</label><br>
                     <label><input type="checkbox" name="show_from_account" <?= !empty($line_form['show_from_account']) ? 'checked' : '' ?>> From Account</label><br>

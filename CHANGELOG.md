@@ -2,6 +2,20 @@
 
 All notable changes to this application are documented here.
 
+## 2.3.0
+- Added per-line Date field option to Templates
+- Fixed template line insert errors
+- Fixed template line bind_param mismatches (use_sats + show_date)
+- Fixed Quick Entry sync
+- Fixed sats conversion using incorrect amount variable during insert
+
+---
+
+## 2.2.2
+- Fixed template line insert error.
+
+---
+
 ## 2.2.1
 - Fixed ledger edit form not loading "Time Received"
 - Fixed ledger edit form not loading "Value at Time Received"
@@ -131,3 +145,6 @@ v2.0.2
 - Ignore Neutral and Transfer categories in ledger total calculations
 - Style Investment dashboard cards in blue and Neutral cards in gray
 
+
+- Fixed template line add/save placeholder mismatch after per-line Date field addition
+- Fixed template line Quick Entry sync insert to include use_sats binding

@@ -10,6 +10,7 @@ $success = "";
 $template_id = (int)($_GET['id'] ?? 0);
 
 
+$ti_has_date = function_exists('rl_column_exists') ? rl_column_exists($conn, 'template_items', 'show_date') : false;
 $ti_has_received_time = function_exists('rl_column_exists') ? rl_column_exists($conn, 'template_items', 'show_received_time') : false;
 $ti_has_value_at_receipt = function_exists('rl_column_exists') ? rl_column_exists($conn, 'template_items', 'show_value_at_receipt') : false;
 
@@ -144,6 +145,7 @@ $stmt = $conn->prepare("
         ti.show_referral,
         ti.show_amount,
         ti.show_notes,
+        " . ($ti_has_date ? "ti.show_date" : "0") . " AS show_date,
         " . ($ti_has_received_time ? "ti.show_received_time" : "1") . " AS show_received_time,
         " . ($ti_has_value_at_receipt ? "ti.show_value_at_receipt" : "1") . " AS show_value_at_receipt,
         ti.use_sats,
@@ -201,24 +203,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         $error = "Batch date is required.";
     }
 
-    $batch_id = 0;
-
-    if ($error === "") {
-        $stmt = $conn->prepare("
-            INSERT INTO batches (app_id, batch_date, title, notes)
-            VALUES (?, ?, ?, ?)
-        ");
-
-        if ($stmt) {
-            $app_id = (int)($template['app_id'] ?? 0);
-            $stmt->bind_param("isss", $app_id, $batch_date, $title, $notes);
-            $stmt->execute();
-            $batch_id = (int)$stmt->insert_id;
-            $stmt->close();
-        } else {
-            $error = "Could not create batch: " . $conn->error;
-        }
-    }
+    $batch_ids_by_date = [];
 
     if ($error === "" && isset($_POST['line_template_id']) && is_array($_POST['line_template_id'])) {
         $miner_ids = $_POST['miner_id'] ?? [];
@@ -228,12 +213,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
         $from_account_ids = $_POST['from_account_id'] ?? [];
         $to_account_ids = $_POST['to_account_id'] ?? [];
         $amounts = $_POST['amount'] ?? [];
+        $line_dates = $_POST['line_date'] ?? [];
         $received_times = $_POST['received_time'] ?? [];
         $value_at_receipts = $_POST['value_at_receipt'] ?? [];
         $use_sats_flags = $_POST['use_sats'] ?? [];
         $line_notes = $_POST['line_notes'] ?? [];
 
+        $app_id = (int)($template['app_id'] ?? 0);
+        $batch_stmt = $conn->prepare("
+            INSERT INTO batches (app_id, batch_date, title, notes)
+            VALUES (?, ?, ?, ?)
+        ");
+
+        if (!$batch_stmt) {
+            $error = "Could not create batch: " . $conn->error;
+        }
+
         foreach ($_POST['line_template_id'] as $idx => $template_line_id) {
+            if ($error !== "") {
+                break;
+            }
+
             $miner_id = (int)($miner_ids[$idx] ?? 0);
             $asset_id = (int)($asset_ids[$idx] ?? 0);
             $category_id = (int)($category_ids[$idx] ?? 0);
@@ -241,10 +241,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
             $from_account_id = (int)($from_account_ids[$idx] ?? 0);
             $to_account_id = (int)($to_account_ids[$idx] ?? 0);
             $amount_raw = trim((string)($amounts[$idx] ?? '0'));
+            $line_date = trim((string)($line_dates[$idx] ?? $batch_date));
             $received_time_raw = trim((string)($received_times[$idx] ?? ''));
             $value_at_receipt_raw = trim((string)($value_at_receipts[$idx] ?? ''));
             $use_sats = !empty($use_sats_flags[$idx]) ? 1 : 0;
             $notes_value = trim((string)($line_notes[$idx] ?? ''));
+
+            if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $line_date)) {
+                $line_date = $batch_date;
+            }
 
             if ($amount_raw === '' || !is_numeric($amount_raw)) {
                 $amount = 0;
@@ -252,16 +257,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                 $amount = (float)$amount_raw;
             }
 
+            if ($use_sats === 1 && rl_is_btc_asset_id($conn, $asset_id) && $amount_raw !== '' && is_numeric($amount_raw)) {
+                $amount = rl_sats_to_btc_float($amount_raw);
+            }
+
             $received_time = ($received_time_raw !== '' && preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $received_time_raw))
                 ? $received_time_raw
                 : null;
-            if ($use_sats === 1 && rl_is_btc_asset_id($conn, $asset_id) && $amount_raw !== '' && is_numeric($amount_raw)) {
-                $amount_raw = (string)rl_sats_to_btc_float($amount_raw);
-            }
 
             $value_at_receipt = ($value_at_receipt_raw !== '' && is_numeric($value_at_receipt_raw))
                 ? (float)$value_at_receipt_raw
                 : null;
+
+            if (!isset($batch_ids_by_date[$line_date])) {
+                $batch_stmt->bind_param("isss", $app_id, $line_date, $title, $notes);
+                if (!$batch_stmt->execute()) {
+                    $error = "Could not create batch: " . $batch_stmt->error;
+                    break;
+                }
+                $batch_ids_by_date[$line_date] = (int)$batch_stmt->insert_id;
+            }
+            $batch_id = $batch_ids_by_date[$line_date];
 
             $stmt = $conn->prepare("
                 INSERT INTO batch_items (
@@ -286,25 +302,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                 break;
             }
 
-			$import_source_type = 'template';
+            $import_source_type = 'template';
 
-			$stmt->bind_param(
-				"iiiiiiidsdss",
-				$batch_id,
-				$miner_id,
-				$asset_id,
-				$category_id,
-				$referral_id,
-				$from_account_id,
-				$to_account_id,
-				$amount,
-				$received_time,
-				$value_at_receipt,
-				$notes_value,
-				$import_source_type
-			);
-            $stmt->execute();
+            $stmt->bind_param(
+                "iiiiiiidsdss",
+                $batch_id,
+                $miner_id,
+                $asset_id,
+                $category_id,
+                $referral_id,
+                $from_account_id,
+                $to_account_id,
+                $amount,
+                $received_time,
+                $value_at_receipt,
+                $notes_value,
+                $import_source_type
+            );
+            if (!$stmt->execute()) {
+                $error = "Could not save batch items: " . $stmt->error;
+                $stmt->close();
+                break;
+            }
             $stmt->close();
+        }
+
+        if ($batch_stmt) {
+            $batch_stmt->close();
         }
     }
 
@@ -379,6 +403,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'save_
                             <th>From</th>
                             <th>To</th>
                             <th>Amount</th>
+                            <th>Date</th>
                             <th>Time</th>
                             <th>Receipt Value</th>
                             <th>Notes</th>
@@ -507,6 +532,22 @@ $amountVal = ($amountVal === null || $amountVal === '' || (float)$amountVal == 0
                                 </td>
 
                                 <td>
+                                    <?php $rowDateValue = $_POST['line_date'][$index] ?? ($_POST['batch_date'] ?? date('Y-m-d')); ?>
+                                    <?php if ((int)($line['show_date'] ?? 0) === 1): ?>
+                                        <input
+                                            type="date"
+                                            name="line_date[]"
+                                            value="<?= h($rowDateValue) ?>"
+                                            class="js-template-line-date"
+                                            data-user-edited="<?= isset($_POST['line_date'][$index]) ? '1' : '0' ?>"
+                                        >
+                                    <?php else: ?>
+                                        <span class="subtext js-template-default-date-display"><?= h($_POST['batch_date'] ?? date('Y-m-d')) ?></span>
+                                        <input type="hidden" name="line_date[]" value="<?= h($_POST['batch_date'] ?? date('Y-m-d')) ?>" class="js-template-default-date-hidden">
+                                    <?php endif; ?>
+                                </td>
+
+                                <td>
                                     <?php if ((int)$line['show_received_time'] === 1): ?>
                                         <input type="time" name="received_time[]" value="<?= h($_POST['received_time'][$index] ?? '') ?>">
                                     <?php else: ?>
@@ -625,16 +666,18 @@ document.addEventListener('DOMContentLoaded', function () {
             const assetEl = row.querySelector('select[name="asset_id[]"], input[name="asset_id[]"]');
             const timeEl = row.querySelector('input[name="received_time[]"]');
             const valueEl = row.querySelector('input[name="value_at_receipt[]"]');
+            const rowDateEl = row.querySelector('input[name="line_date[]"]');
             const dateEl = document.getElementById('batch_date');
+            const effectiveDateEl = rowDateEl || dateEl;
 
-            if (!statusEl || !amountEl || !assetEl || !timeEl || !valueEl || !dateEl) {
+            if (!statusEl || !amountEl || !assetEl || !timeEl || !valueEl || !effectiveDateEl) {
                 return;
             }
 
             const payload = {
                 asset_id: assetEl.value,
                 amount: ((row.querySelector('input[name^="use_sats["]') && row.querySelector('input[name^="use_sats["]').checked) ? convertRowAmountForSats(amountEl.value, false) : amountEl.value),
-                date: dateEl.value,
+                date: effectiveDateEl.value,
                 time: timeEl.value
             };
 
@@ -671,6 +714,31 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 });
+
+    const batchDateEl = document.getElementById('batch_date');
+    function syncTemplateLineDates() {
+        if (!batchDateEl) return;
+        document.querySelectorAll('.js-template-default-date-hidden').forEach(function (input) {
+            input.value = batchDateEl.value;
+        });
+        document.querySelectorAll('.js-template-default-date-display').forEach(function (el) {
+            el.textContent = batchDateEl.value;
+        });
+        document.querySelectorAll('.js-template-line-date').forEach(function (input) {
+            if (input.dataset.userEdited !== '1') {
+                input.value = batchDateEl.value;
+            }
+        });
+    }
+    if (batchDateEl) {
+        batchDateEl.addEventListener('change', syncTemplateLineDates);
+        syncTemplateLineDates();
+    }
+    document.querySelectorAll('.js-template-line-date').forEach(function (input) {
+        input.addEventListener('change', function () {
+            input.dataset.userEdited = '1';
+        });
+    });
 
     const saveForm = document.querySelector('form[method="post"]');
     if (saveForm) {
