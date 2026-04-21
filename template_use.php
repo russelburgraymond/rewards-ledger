@@ -606,138 +606,109 @@ $amountVal = ($amountVal === null || $amountVal === '' || (float)$amountVal == 0
 
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    const btcAssetIds = <?= json_encode(array_values(array_map('intval', array_column(array_filter($assets, 'rl_is_btc_asset_row'), 'id')))) ?>;
-
-    function isBtcAsset(value) {
-        return btcAssetIds.indexOf(parseInt(value || '0', 10)) !== -1;
-    }
-    function trimNumeric(value) {
-        return String(value).replace(/\\.0+$/, '').replace(/(\\.\\d*?)0+$/, '$1');
-    }
-    function btcToSatsString(value) {
-        if (value === '' || isNaN(Number(value))) return value;
-        return String(Math.round(Number(value) * 100000000));
-    }
-    function satsToBtcString(value) {
-        if (value === '' || isNaN(Number(value))) return value;
-        return trimNumeric((Number(value) / 100000000).toFixed(8));
-    }
-    function convertRowAmountForSats(raw, toSats) {
-        if (raw === '' || isNaN(Number(raw))) return raw;
-        return toSats ? btcToSatsString(raw) : satsToBtcString(raw);
-    }
-    document.querySelectorAll('.js-template-sats-row').forEach(function (row) {
-        const idx = row.getAttribute('data-row-index');
-        const checkbox = row.querySelector('input[type="checkbox"]');
-        const tr = row.closest('tr');
-        const amountEl = tr ? tr.querySelector('input[name="amount[]"]') : null;
-        const assetEl = tr ? tr.querySelector('select[name="asset_id[]"], input[name="asset_id[]"]') : null;
-
-        function currentAssetId() {
-            if (assetEl) return assetEl.value;
-            return row.getAttribute('data-default-asset-id') || '0';
-        }
-
-        function refresh() {
-            const show = isBtcAsset(currentAssetId());
-            row.style.display = show ? '' : 'none';
-            if (!show && checkbox.checked && amountEl) {
-                amountEl.value = convertRowAmountForSats(amountEl.value, false);
-                checkbox.checked = false;
-            } else if (show && row.dataset.satsDefault === '1' && !row.dataset.satsApplied && amountEl && amountEl.value !== '') {
-                amountEl.value = convertRowAmountForSats(amountEl.value, true);
-                checkbox.checked = true;
-                row.dataset.satsApplied = '1';
-            }
-        }
-
-        if (assetEl) assetEl.addEventListener('change', refresh);
-        if (checkbox && amountEl) {
-            checkbox.addEventListener('change', function () {
-                amountEl.value = convertRowAmountForSats(amountEl.value, checkbox.checked);
-            });
-        }
-        refresh();
-    });
-
-    const templateForm = document.querySelector('form method="post"');
     document.querySelectorAll('.js-template-price-lookup').forEach(function (button) {
-        button.addEventListener('click', async function () {
+        button.addEventListener('click', function (e) {
+            e.preventDefault();
+
             const row = button.closest('tr');
-            const rowIndex = button.getAttribute('data-row-index');
-            const statusEl = document.querySelector('.js-template-price-status[data-row-index="' + rowIndex + '"]');
-            const amountEl = row.querySelector('input[name="amount[]"]');
-            const assetEl = row.querySelector('select[name="asset_id[]"], input[name="asset_id[]"]');
-            const timeEl = row.querySelector('input[name="received_time[]"]');
-            const valueEl = row.querySelector('input[name="value_at_receipt[]"]');
-            const rowDateEl = row.querySelector('input[name="line_date[]"]');
-            const dateEl = document.getElementById('batch_date');
-            const effectiveDateEl = rowDateEl || dateEl;
+            if (!row) return;
 
-            if (!statusEl || !amountEl || !assetEl || !timeEl || !valueEl || !effectiveDateEl) {
+            const assetField = row.querySelector('select[name="asset_id[]"], input[name="asset_id[]"]');
+            const amountField = row.querySelector('input[name="amount[]"]');
+            const valueField = row.querySelector('input[name="value_at_receipt[]"]');
+            const timeField = row.querySelector('input[name="received_time[]"]');
+            const dateField = row.querySelector('input[name="line_date[]"]');
+            const statusField = row.querySelector('.js-template-price-status');
+
+            if (!assetField || !amountField || !valueField) {
                 return;
             }
 
-            const payload = {
-                asset_id: assetEl.value,
-                amount: ((row.querySelector('input[name^="use_sats["]') && row.querySelector('input[name^="use_sats["]').checked) ? convertRowAmountForSats(amountEl.value, false) : amountEl.value),
-                date: effectiveDateEl.value,
-                time: timeEl.value
-            };
+            const assetId = assetField.value || '';
+            const amount = amountField.value || '';
+            const receivedTime = timeField ? timeField.value : '';
+            const rowDate = dateField ? dateField.value : '';
 
-            if (!payload.asset_id || payload.asset_id === '0' || !payload.amount || !payload.date || !payload.time) {
-                statusEl.textContent = 'Enter asset, amount, date, and time first.';
-                statusEl.style.color = '#d9534f';
+            if (!assetId || assetId === '0') {
+                if (statusField) statusField.textContent = 'Select an asset first.';
                 return;
             }
 
-            statusEl.textContent = 'Looking up price...';
-            statusEl.style.color = '';
-
-            try {
-                const response = await fetch('ajax/get_price.php', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
-                const data = await response.json();
-
-                if (!response.ok || !data.success) {
-                    statusEl.textContent = data.error || 'Price lookup failed.';
-                    statusEl.style.color = '#d9534f';
-                    return;
-                }
-
-                valueEl.value = data.total_value_formatted || data.total_value || '';
-                statusEl.textContent = data.message || ('Loaded ' + (data.currency_symbol || '$') + (data.unit_price_formatted || data.unit_price) + ' per unit.');
-                statusEl.style.color = '';
-            } catch (error) {
-                statusEl.textContent = 'Price lookup failed.';
-                statusEl.style.color = '#d9534f';
+            if (!amount || Number(amount) === 0) {
+                if (statusField) statusField.textContent = 'Enter an amount first.';
+                return;
             }
+
+            if (!rowDate || !receivedTime) {
+                if (statusField) statusField.textContent = 'Date and time are required.';
+                return;
+            }
+
+            if (statusField) statusField.textContent = 'Looking up value...';
+
+const params = new URLSearchParams();
+            params.append('asset', assetId);
+            params.append('amount', amount);
+            params.append('date', rowDate);
+            params.append('time', receivedTime);
+
+ fetch('ajax/get_price.php', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: {
+        'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+    },
+    body: params.toString()
+})
+.then(function (response) {
+    return response.json();
+})
+.then(function (data) {
+    if (data && data.success === true && typeof data.total_value !== 'undefined' && data.total_value !== null) {
+        valueField.value = data.total_value_formatted || data.total_value;
+        if (statusField) statusField.textContent = data.message || 'Value loaded.';
+    } else if (data && typeof data.value !== 'undefined' && data.value !== null) {
+        valueField.value = data.value;
+        if (statusField) statusField.textContent = 'Value loaded.';
+    } else if (data && data.error) {
+        if (statusField) statusField.textContent = data.error;
+    } else {
+        if (statusField) statusField.textContent = 'Lookup response: ' + JSON.stringify(data);
+    }
+})
+.catch(function () {
+    if (statusField) statusField.textContent = 'Could not look up value.';
+});
+			
+			
         });
     });
-});
 
     const batchDateEl = document.getElementById('batch_date');
+
     function syncTemplateLineDates() {
         if (!batchDateEl) return;
+
         document.querySelectorAll('.js-template-default-date-hidden').forEach(function (input) {
             input.value = batchDateEl.value;
         });
+
         document.querySelectorAll('.js-template-default-date-display').forEach(function (el) {
             el.textContent = batchDateEl.value;
         });
+
         document.querySelectorAll('.js-template-line-date').forEach(function (input) {
             if (input.dataset.userEdited !== '1') {
                 input.value = batchDateEl.value;
             }
         });
     }
+
     if (batchDateEl) {
         batchDateEl.addEventListener('change', syncTemplateLineDates);
         syncTemplateLineDates();
     }
+
     document.querySelectorAll('.js-template-line-date').forEach(function (input) {
         input.addEventListener('change', function () {
             input.dataset.userEdited = '1';
@@ -756,4 +727,5 @@ document.addEventListener('DOMContentLoaded', function () {
             });
         });
     }
+});
 </script>
