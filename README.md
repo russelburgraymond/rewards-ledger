@@ -3,6 +3,13 @@
 #Screenshots
 
 [Ledger](Screenshots/ledger.png)
+[Dashboard](Screenshot 2026-04-21 072722.png)
+[Graphs](Screenshot 2026-04-21 072734.png)
+[More Graphs](Screenshot 2026-04-21 072739.png)
+[Templates Selection](Screenshot 2026-04-21 072801.png)
+[Templates Entry](Screenshot 2026-04-21 072811.png)
+[Templates Entry](Screenshot 2026-04-21 072834.png)
+
 
 A PHP/MySQL ledger-style tracker for GoMining activity.
 
