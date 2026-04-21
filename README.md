@@ -1,14 +1,26 @@
 # Rewards Ledger
 
-#Screenshots
+## Screenshots
 
-![Ledger](Screenshots/ledger.png)
-![Dashboard](Screenshots/Screenshot 2026-04-21 072722.png)
-![Graphs](Screenshots/Screenshot 2026-04-21 072734.png)
-![More Graphs](Screenshots/Screenshot 2026-04-21 072739.png)
-![Templates Selection](Screenshots/Screenshot 2026-04-21 072801.png)
-![Templates Entry](Screenshots/Screenshot 2026-04-21 072811.png)
-![Templates Entry](Screenshots/Screenshot 2026-04-21 072834.png)
+### Ledger
+![Ledger](assets/images/ledger.png)
+
+### Dashboard
+![Dashboard](assets/images/Screenshot 2026-04-21 072722.png)
+
+### Graphs
+![Graphs](assets/images/Screenshot 2026-04-21 072734.png)
+
+### More Graphs
+![More Graphs](assets/images/Screenshot 2026-04-21 072739.png)
+
+### Templates Selection
+![Templates Selection](assets/images/Screenshot 2026-04-21 072801.png)
+
+### Templates Entry
+![Templates Entry](assets/images/Screenshot 2026-04-21 072811.png)
+
+![Templates Entry 2](assets/images/Screenshot 2026-04-21 072834.png)
 
 
 A PHP/MySQL ledger-style tracker for GoMining activity.
