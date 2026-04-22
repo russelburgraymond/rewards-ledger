@@ -1,111 +1,199 @@
-# Rewards Ledger
+# RewardLedger
+
+<p align="center">
+  <strong>A practical reward, income, expense, and asset tracking app built with PHP and MySQL.</strong>
+</p>
+
+<p align="center">
+  Track mining rewards, app earnings, wallet movements, expenses, templates, quick entries, and dashboard totals in one place.
+</p>
+
+<p align="center">
+  <img alt="PHP" src="https://img.shields.io/badge/PHP-7.4%2B-777BB4?logo=php&logoColor=white">
+  <img alt="MySQL" src="https://img.shields.io/badge/MySQL%20%2F%20MariaDB-supported-00758F?logo=mysql&logoColor=white">
+  <img alt="Status" src="https://img.shields.io/badge/status-active-success">
+</p>
+
+---
+
+## Why RewardLedger?
+
+RewardLedger is built for real-world tracking of:
+
+- mining rewards
+- referral rewards
+- delivery income
+- tips and incentive pay
+- wallet movements
+- expenses
+- category totals
+- asset balances
+- recurring and repeat entry workflows
+
+Instead of spreading everything across spreadsheets, screenshots, notes, and memory, RewardLedger gives you a structured way to track what came in, what went out, where it came from, and how it changed over time.
+
+It is especially useful for users who want one system for mixed sources like:
+
+- GoMining
+- Spark
+- Atlas Earth
+- Coinbase
+- custom apps, wallets, or accounts
+
+---
+
+## Features
+
+### Dashboard totals
+- Track category totals by app
+- View asset-based totals inside each tile
+- Separate income, expense, neutral, and balance-style categories
+- Dashboard cards grouped by app for a clean high-level view
+
+### Graphs and visual reporting
+- Net profit over time
+- Income vs expense comparisons
+- Category breakdown charts
+- Different grouping and stacked views for clearer analysis
+
+### Full ledger tracking
+- Store every entry with:
+  - date
+  - app
+  - asset
+  - category
+  - from / to accounts
+  - amount
+  - notes
+- Edit and delete entries directly from the ledger
+- Export ledger data to CSV or PDF
+
+### Quick Entry
+- Fast entry workflow for repeated items
+- Preconfigured quick add items
+- Great for everyday or repetitive logging
+- Designed to reduce clicks and repetitive typing
+
+### Templates
+- Build reusable entry templates
+- Store multi-line templates
+- Reuse common grouped transactions quickly
+- Useful for repeated patterns like app payouts, grouped expenses, or mining reward sets
+
+### Settings-driven control
+- Manage:
+  - apps
+  - miners
+  - referrals
+  - categories
+  - assets
+  - accounts
+  - AI Import aliases
+  - dashboard settings
+- Designed so the app can be customized without hardcoding everything
+
+### Multi-asset support
+- Supports multiple asset types like:
+  - Bitcoin (BTC)
+  - GoMining Token (GMT)
+  - USD
+  - other fiat or crypto assets
+- Per-asset display support and cleaner totals
+
+### Reward and expense flexibility
+RewardLedger is not locked to one income source or one reward model.
+
+It works for:
+- mining rewards
+- app-based earnings
+- wallet rewards
+- referral bonuses
+- expenses and purchases
+- transfers and conversions
+- one-off adjustments
+
+---
 
 ## Screenshots
+
+### Dashboard
+![Dashboard](Screenshots/index.png)
+
+### Net Profit Over Time
+![Net Profit Over Time](Screenshots/graph1.png)
+
+### Income vs Expense
+![Income vs Expense](Screenshots/graph2.png)
+
+### Category Breakdown
+![Category Breakdown](Screenshots/graph3.png)
 
 ### Ledger
 ![Ledger](Screenshots/ledger.png)
 
-### Dashboard
-![Dashboard](Screenshots/Screenshot2026-04-21072722.png)
+### Quick Add
+![Quick Add](Screenshots/quickadd.png)
 
-### Graphs
-![Graphs](Screenshots/Screenshot2026-04-21072734.png)
+### Settings
+![Settings](Screenshots/settings.png)
 
-### More Graphs
-![More Graphs](Screenshots/Screenshot2026-04-21072739.png)
+### Templates
+![Templates](Screenshots/templates.png)
 
-### Templates Selection
-![Templates Selection](Screenshots/Screenshot2026-04-21072801.png)
+---
 
-### Templates Entry
-![Templates Entry](Screenshots/Screenshot2026-04-21072811.png)
+## Core Workflow
 
-![Templates Entry 2](Screenshots/Screenshot2026-04-21072834.png)
+### 1. Configure your system
+Start in **Settings** and define the pieces of your setup:
+- apps
+- categories
+- assets
+- accounts
+- miners
+- referrals
 
+### 2. Add entries
+Use:
+- **Quick Entry** for fast single entries
+- **Templates** for repeated groups of entries
+- **Ledger** editing for direct entry management
 
-A PHP/MySQL ledger-style tracker for GoMining activity.
+### 3. Review totals
+Use the **Dashboard** to see tracked category totals grouped by app.
 
-## Requirements
-- PHP 8+
-- MySQL / MariaDB
-- Local server (Laragon / UniServerZ recommended)
+### 4. Analyze trends
+Use **Graphs** to understand:
+- profit over time
+- income vs expense behavior
+- category concentration
 
-## Setup
-1. Clone repo
-2. Copy db.example.php to db.php and update credentials.
-3. Update db.php with your credentials
-4. Open in browser
-5. Database auto-creates
+### 5. Refine and repeat
+As your categories, accounts, and apps evolve, RewardLedger keeps the structure flexible enough to grow with you.
 
-## Known Limitations
-- No user accounts yet
-- No permissions system
-- Quick Adds UI is basic (editing coming later)
-- Dashboard still being refined
-
-## Default Login
-(None yet)
-
-## Notes
-- First load seeds default apps, assets, and categories
-
-## Features
-
-- Track miners individually
-- Track gross and net mining rewards
-- Track maintenance and electricity separately
-- Track referral rewards and known/unknown referrals
-- Track upgrades, withdrawals, transfers, and adjustments
-- Quick Entry for one-off items
-- Batch templates for repeated daily miner entry
-- Batch totals by asset and behavior type
-
-## Project Structure
-
-- `public/` = web root
-- `app/config/` = config
-- `app/core/` = bootstrap, db, schema, helpers
-- `app/components/` = header/footer
-- `app/pages/` = page files
-- `storage/` = uploads and storage
-
-## Requirements
-
-- PHP 8+
-- MySQL / MariaDB
-- Apache or Laragon
+---
 
 ## Installation
 
-1. Copy the project into your web server directory.
-2. Point your local web server to the `public/` folder if possible.
-3. Edit `app/config/config.php` with your database details.
-4. Load the app in your browser.
-5. The database schema will auto-create/update on first load.
+### Requirements
+- PHP 7.4+
+- MySQL or MariaDB
+- Local or hosted PHP environment
 
-## Default Local URL Example
+Examples:
+- XAMPP
+- Laragon
+- UniServer Zero
+- Other PHP/MySQL environments
 
-If using Laragon and the project folder is inside `www/projects/`, a common URL would be:
+### Setup
+1. Clone or download the repository
+2. Place it in your web root
+3. Update your database settings in `config.php`
+4. Open the project in your browser
+5. The app will create or update required tables on load
 
-`http://localhost/projects/gomining-tracker/public/`
+Example path:
 
-## Notes
-
-This app is designed as a personal tracking and reporting tool. It is not financial, tax, or legal advice.
-
-## License
-
-MIT
-
-## Disclaimer
-
-This software is provided for informational and personal tracking purposes only.
-
-The author makes no guarantees regarding the accuracy, completeness, or reliability
-of the data recorded or generated by this software.
-
-Users are solely responsible for verifying financial records, tax reporting,
-and compliance with applicable laws and regulations.
-
-The author is not responsible for financial decisions, tax liabilities,
-losses, or damages resulting from the use of this software.
+```text
+/www/projects/rewardledger
